@@ -114,8 +114,13 @@ export default function Internships() {
                   <React.Fragment key={internship.id}>
                     <tr className="hover:bg-muted/50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <Link to={`/students/${internship.student_id}`} className="text-primary hover:underline font-medium text-sm">
-                          View Student {internship.student_id}
+                        <Link to={`/students/${internship.student_id}`} className="block group">
+                          <div className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
+                            {internship.student?.name || internship.student_name || `Student ${internship.student_id}`}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {internship.student?.student_id || internship.student_string_id || ''}
+                          </div>
                         </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground font-medium">

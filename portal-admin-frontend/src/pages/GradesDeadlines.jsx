@@ -153,8 +153,14 @@ export default function GradesDeadlines() {
                 currentAssessments.map((assessment) => (
                   <tr key={assessment.id} className="hover:bg-muted/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-foreground">{assessment.student?.name}</div>
-                      <div className="text-xs text-muted-foreground">{assessment.student?.student_id}</div>
+                      <Link to={`/students/${assessment.student_id}`} className="block group">
+                        <div className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
+                          {assessment.student?.name || assessment.student_name || `Student ${assessment.student_id}`}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {assessment.student?.student_id || assessment.student_string_id || ''}
+                        </div>
+                      </Link>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">
                       {assessment.course_code}
