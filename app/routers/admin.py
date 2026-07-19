@@ -507,12 +507,21 @@ async def list_overdue_payments(session: Session = Depends(get_session)):
     return result
 
 
-@router.get("/internships/pending", response_model=List[InternshipRead])
+@router.get("/internships/pending")
 async def list_pending_internships(session: Session = Depends(get_session)):
     """List pending internship applications"""
     internships = session.exec(
-        select(Internship)
+        select(Internship, User)
+        .join(User, Internship.student_id == User.id)
         .where(Internship.status == InternshipStatus.PENDING)
         .order_by(Internship.created_at)
     ).all()
-    return internships
+    
+    result = []
+    for internship, user in internships:
+        i_dict = internship.model_dump()
+        i_dict["student_name"] = user.full_name
+        i_dict["student_string_id"] = user.student_id
+        result.append(i_dict)
+        
+    return result

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { getStudents, getStudentSummary, publishAssessment, simulateDeadlineCheck } from '../api';
 import { useToast } from '../hooks/useToast';
 import { Button } from '../components/ui/Button';
@@ -153,9 +154,9 @@ export default function GradesDeadlines() {
                 currentAssessments.map((assessment) => (
                   <tr key={assessment.id} className="hover:bg-muted/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Link to={`/students/${assessment.student_id}`} className="block group">
+                      <Link to={`/students/${assessment.student?.id || assessment.student_id}`} className="block group">
                         <div className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-                          {assessment.student?.name || assessment.student_name || `Student ${assessment.student_id}`}
+                          {assessment.student?.name || assessment.student_name || `Student ${assessment.student?.id || assessment.student_id}`}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {assessment.student?.student_id || assessment.student_string_id || ''}
