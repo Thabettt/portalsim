@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the backend code
 COPY app/ ./app/
+COPY seed.py .
 
 # Copy the built frontend from Stage 1 into the location expected by FastAPI
 COPY --from=frontend-builder /app/frontend/dist ./portal-admin-frontend/dist
