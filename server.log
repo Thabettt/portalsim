@@ -1,0 +1,67 @@
+INFO:     Started server process [24408]
+INFO:     Waiting for application startup.
+2026-07-18 23:09:41,528 - app.main - INFO - Starting University Portal Simulator...
+2026-07-18 23:09:41,529 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-07-18 23:09:41,529 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2026-07-18 23:09:41,529 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("user")
+2026-07-18 23:09:41,529 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("user")
+2026-07-18 23:09:41,529 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-18 23:09:41,529 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-07-18 23:09:41,530 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("course")
+2026-07-18 23:09:41,530 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("course")
+2026-07-18 23:09:41,530 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-18 23:09:41,530 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-07-18 23:09:41,531 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("courseenrollment")
+2026-07-18 23:09:41,531 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("courseenrollment")
+2026-07-18 23:09:41,531 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-18 23:09:41,531 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-07-18 23:09:41,531 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("attendance")
+2026-07-18 23:09:41,531 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("attendance")
+2026-07-18 23:09:41,531 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-18 23:09:41,531 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-07-18 23:09:41,532 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("payment")
+2026-07-18 23:09:41,532 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("payment")
+2026-07-18 23:09:41,532 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-18 23:09:41,532 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-07-18 23:09:41,532 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("assessment")
+2026-07-18 23:09:41,532 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("assessment")
+2026-07-18 23:09:41,532 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-18 23:09:41,532 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-07-18 23:09:41,533 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("internship")
+2026-07-18 23:09:41,533 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("internship")
+2026-07-18 23:09:41,533 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-18 23:09:41,533 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-07-18 23:09:41,533 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("webhooksetting")
+2026-07-18 23:09:41,533 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("webhooksetting")
+2026-07-18 23:09:41,533 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-18 23:09:41,533 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-07-18 23:09:41,533 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("webhooklog")
+2026-07-18 23:09:41,533 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("webhooklog")
+2026-07-18 23:09:41,533 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-18 23:09:41,533 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-07-18 23:09:41,534 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("systemsetting")
+2026-07-18 23:09:41,534 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("systemsetting")
+2026-07-18 23:09:41,534 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-18 23:09:41,534 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-07-18 23:09:41,535 INFO sqlalchemy.engine.Engine COMMIT
+2026-07-18 23:09:41,535 - sqlalchemy.engine.Engine - INFO - COMMIT
+2026-07-18 23:09:41,540 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-18 23:09:41,540 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-18 23:09:41,540 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-18 23:09:41,541 - apscheduler.scheduler - INFO - Added job "Daily Attendance Simulation" to job store "default"
+2026-07-18 23:09:41,541 - apscheduler.scheduler - INFO - Added job "Payment Reminders Check" to job store "default"
+2026-07-18 23:09:41,541 - apscheduler.scheduler - INFO - Added job "Deadline Check" to job store "default"
+2026-07-18 23:09:41,541 - apscheduler.scheduler - INFO - Scheduler started
+2026-07-18 23:09:41,542 - app.scheduler - INFO - Scheduler started with jobs:
+2026-07-18 23:09:41,542 - app.scheduler - INFO -   - Payment Reminders Check: 2026-07-19 09:00:00+03:00
+2026-07-18 23:09:41,542 - app.scheduler - INFO -   - Deadline Check: 2026-07-19 10:00:00+03:00
+2026-07-18 23:09:41,542 - app.scheduler - INFO -   - Daily Attendance Simulation: 2026-07-19 23:00:00+03:00
+2026-07-18 23:09:41,542 - app.main - INFO - Application startup complete
+INFO:     Application startup complete.
+ERROR:    [Errno 10048] error while attempting to bind on address ('0.0.0.0', 8000): only one usage of each socket address (protocol/network address/port) is normally permitted
+INFO:     Waiting for application shutdown.
+2026-07-18 23:09:41,544 - app.main - INFO - Shutting down...
+2026-07-18 23:09:41,544 - apscheduler.scheduler - INFO - Scheduler has been shut down
+2026-07-18 23:09:41,544 - app.scheduler - INFO - Scheduler stopped
+2026-07-18 23:09:41,544 - app.main - INFO - Application shutdown complete
+INFO:     Application shutdown complete.

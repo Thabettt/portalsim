@@ -1,0 +1,181 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Webhook Payload Contracts v0.1",
+  "description": "Versioned webhook payload schemas for University Portal Simulator",
+  "version": "0.1.0",
+  "event_types": [
+    "payment_reminder",
+    "internship_status_update",
+    "attendance_alert",
+    "grade_published",
+    "deadline_reminder",
+    "attendance_marked",
+    "payment_status_change"
+  ],
+  "common_fields": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier for idempotency"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "payment_reminder",
+        "internship_status_update",
+        "attendance_alert",
+        "grade_published",
+        "deadline_reminder",
+        "attendance_marked",
+        "payment_status_change"
+      ],
+      "description": "Discriminator field for payload type"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event timestamp in UTC"
+    }
+  },
+  "payloads": {
+    "payment_reminder": {
+      "type": "object",
+      "required": ["event_id", "event_type", "timestamp", "student_id", "student_name", "amount_due", "currency", "due_date", "reminder_type"],
+      "properties": {
+        "event_id": {"type": "string", "format": "uuid"},
+        "event_type": {"type": "string", "const": "payment_reminder"},
+        "timestamp": {"type": "string", "format": "date-time"},
+        "student_id": {"type": "string", "pattern": "^STU-\\d{4}-\\d{4}$"},
+        "student_name": {"type": "string"},
+        "student_email": {"type": "string", "format": "email"},
+        "payment_id": {"type": "integer"},
+        "payment_type": {"type": "string", "enum": ["tuition", "lab_fee", "library_fee", "exam_fee", "other"]},
+        "amount_due": {"type": "number", "minimum": 0},
+        "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+        "due_date": {"type": "string", "format": "date"},
+        "days_overdue": {"type": "integer", "minimum": 0},
+        "reminder_type": {"type": "string", "enum": ["7_days_before", "3_days_before", "1_day_before", "overdue", "upcoming"]},
+        "invoice_number": {"type": "string", "nullable": true}
+      }
+    },
+    "internship_status_update": {
+      "type": "object",
+      "required": ["event_id", "event_type", "timestamp", "student_id", "student_name", "company_name", "status"],
+      "properties": {
+        "event_id": {"type": "string", "format": "uuid"},
+        "event_type": {"type": "string", "const": "internship_status_update"},
+        "timestamp": {"type": "string", "format": "date-time"},
+        "student_id": {"type": "string", "pattern": "^STU-\\d{4}-\\d{4}$"},
+        "student_name": {"type": "string"},
+        "student_email": {"type": "string", "format": "email"},
+        "internship_id": {"type": "integer"},
+        "company_name": {"type": "string"},
+        "position": {"type": "string"},
+        "previous_status": {"type": "string", "enum": ["pending", "approved", "rejected", "in_progress", "completed"]},
+        "new_status": {"type": "string", "enum": ["pending", "approved", "rejected", "in_progress", "completed"]},
+        "approved_by": {"type": "string", "nullable": true},
+        "approved_at": {"type": "string", "format": "date-time", "nullable": true},
+        "rejection_reason": {"type": "string", "nullable": true}
+      }
+    },
+    "attendance_alert": {
+      "type": "object",
+      "required": ["event_id", "event_type", "timestamp", "student_id", "student_name", "course_code", "course_name", "date", "status", "warning_level", "total_absences"],
+      "properties": {
+        "event_id": {"type": "string", "format": "uuid"},
+        "event_type": {"type": "string", "const": "attendance_alert"},
+        "timestamp": {"type": "string", "format": "date-time"},
+        "student_id": {"type": "string", "pattern": "^STU-\\d{4}-\\d{4}$"},
+        "student_name": {"type": "string"},
+        "student_email": {"type": "string", "format": "email"},
+        "course_code": {"type": "string"},
+        "course_name": {"type": "string"},
+        "date": {"type": "string", "format": "date"},
+        "status": {"type": "string", "enum": ["present", "absent", "late", "excused"]},
+        "warning_level": {"type": "string", "enum": ["first_warning", "second_warning", "final_warning"]},
+        "total_absences": {"type": "integer", "minimum": 0}
+      }
+    },
+    "grade_published": {
+      "type": "object",
+      "required": ["event_id", "event_type", "timestamp", "student_id", "student_name", "course_code", "course_name", "assessment_type", "assessment_title", "score", "max_score", "percentage"],
+      "properties": {
+        "event_id": {"type": "string", "format": "uuid"},
+        "event_type": {"type": "string", "const": "grade_published"},
+        "timestamp": {"type": "string", "format": "date-time"},
+        "student_id": {"type": "string", "pattern": "^STU-\\d{4}-\\d{4}$"},
+        "student_name": {"type": "string"},
+        "student_email": {"type": "string", "format": "email"},
+        "assessment_id": {"type": "integer"},
+        "assessment_title": {"type": "string"},
+        "assessment_type": {"type": "string", "enum": ["quiz", "midterm", "final", "assignment", "project", "participation"]},
+        "course_code": {"type": "string"},
+        "course_name": {"type": "string"},
+        "score": {"type": "number", "minimum": 0},
+        "max_score": {"type": "number", "minimum": 1},
+        "weight": {"type": "number", "minimum": 0},
+        "percentage": {"type": "number", "minimum": 0, "maximum": 100}
+      }
+    },
+    "deadline_reminder": {
+      "type": "object",
+      "required": ["event_id", "event_type", "timestamp", "student_id", "student_name", "course_code", "course_name", "assessment_title", "assessment_type", "due_date", "days_until_due"],
+      "properties": {
+        "event_id": {"type": "string", "format": "uuid"},
+        "event_type": {"type": "string", "const": "deadline_reminder"},
+        "timestamp": {"type": "string", "format": "date-time"},
+        "student_id": {"type": "string", "pattern": "^STU-\\d{4}-\\d{4}$"},
+        "student_name": {"type": "string"},
+        "student_email": {"type": "string", "format": "email"},
+        "assessment_id": {"type": "integer"},
+        "assessment_title": {"type": "string"},
+        "assessment_type": {"type": "string", "enum": ["quiz", "midterm", "final", "assignment", "project", "participation"]},
+        "course_code": {"type": "string"},
+        "course_name": {"type": "string"},
+        "due_date": {"type": "string", "format": "date"},
+        "days_until_due": {"type": "integer", "minimum": 0},
+        "reminder_offset": {"type": "string"},
+        "max_score": {"type": "number", "minimum": 1},
+        "weight": {"type": "number", "minimum": 0}
+      }
+    },
+    "attendance_marked": {
+      "type": "object",
+      "required": ["event_id", "event_type", "timestamp", "student_id", "student_name", "course_code", "course_name", "date", "status", "warning_level"],
+      "properties": {
+        "event_id": {"type": "string", "format": "uuid"},
+        "event_type": {"type": "string", "const": "attendance_marked"},
+        "timestamp": {"type": "string", "format": "date-time"},
+        "student_id": {"type": "string", "pattern": "^STU-\\d{4}-\\d{4}$"},
+        "student_name": {"type": "string"},
+        "student_email": {"type": "string", "format": "email"},
+        "course_code": {"type": "string"},
+        "course_name": {"type": "string"},
+        "date": {"type": "string", "format": "date"},
+        "status": {"type": "string", "enum": ["present", "absent", "late", "excused"]},
+        "warning_level": {"type": "string", "enum": ["none", "first_warning", "second_warning", "final_warning"]},
+        "marked_by": {"type": "string"}
+      }
+    },
+    "payment_status_change": {
+      "type": "object",
+      "required": ["event_id", "event_type", "timestamp", "student_id", "student_name", "payment_type", "amount", "paid_amount", "due_date", "status"],
+      "properties": {
+        "event_id": {"type": "string", "format": "uuid"},
+        "event_type": {"type": "string", "const": "payment_status_change"},
+        "timestamp": {"type": "string", "format": "date-time"},
+        "student_id": {"type": "string", "pattern": "^STU-\\d{4}-\\d{4}$"},
+        "student_name": {"type": "string"},
+        "student_email": {"type": "string", "format": "email"},
+        "payment_id": {"type": "integer"},
+        "payment_type": {"type": "string", "enum": ["tuition", "lab_fee", "library_fee", "exam_fee", "other"]},
+        "amount": {"type": "number", "minimum": 0},
+        "paid_amount": {"type": "number", "minimum": 0},
+        "due_date": {"type": "string", "format": "date"},
+        "previous_status": {"type": "string", "enum": ["pending", "paid", "overdue", "partial", "waived"]},
+        "new_status": {"type": "string", "enum": ["pending", "paid", "overdue", "partial", "waived"]},
+        "invoice_number": {"type": "string", "nullable": true}
+      }
+    }
+  }
+}
