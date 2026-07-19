@@ -22,7 +22,7 @@ jobs:
             cd ~/projects/portal || exit
             
             # Pull the latest code from GitHub
-            git pull origin main
+            git pull origin master
             
             # Rebuild and restart the Docker container seamlessly
             docker compose up -d --build
