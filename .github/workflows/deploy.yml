@@ -1,0 +1,28 @@
+name: Deploy to GCP
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to GCP Instance
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: SSH and Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GCP_HOST_IP }}
+          username: ${{ secrets.GCP_SSH_USERNAME }}
+          key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
+          script: |
+            # Navigate to the project directory
+            cd /opt/university-portal-sim || exit
+            
+            # Pull the latest code from GitHub
+            git pull origin main
+            
+            # Rebuild and restart the Docker container seamlessly
+            docker compose up -d --build

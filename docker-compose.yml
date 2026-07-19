@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  portal-sim:
+    build: .
+    container_name: university-portal-sim
+    ports:
+      - "8080:8080"
+    volumes:
+      # Map the database file so it persists between container restarts
+      # Create an empty 'university_portal.db' on the server first if it doesn't exist
+      - ./university_portal.db:/app/university_portal.db
+    restart: unless-stopped
