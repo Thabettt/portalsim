@@ -19,7 +19,7 @@ jobs:
           key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
           script: |
             # Navigate to the project directory
-            cd /opt/university-portal-sim || exit
+            cd ~/projects/portal || exit
             
             # Pull the latest code from GitHub
             git pull origin main
