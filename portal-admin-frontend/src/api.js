@@ -2,7 +2,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? "" : "http://localhost:8000");
 
 async function fetchApi(endpoint, options = {}) {
-  const urlObj = new URL(`${API_BASE_URL}${endpoint}`);
+  const urlObj = new URL(`${API_BASE_URL}${endpoint}`, window.location.origin);
   urlObj.searchParams.append("_t", Date.now());
   const url = urlObj.toString();
   const response = await fetch(url, {
@@ -134,7 +134,7 @@ export async function getCourseAttendance(courseCode) {
 
 // ==== WEBHOOK LOGS ====
 export async function getWebhookLogs(page = 1, pageSize = 50, eventType = null) {
-  const url = new URL(`${API_BASE_URL}/admin/webhook-logs`);
+  const url = new URL(`${API_BASE_URL}/admin/webhook-logs`, window.location.origin);
   url.searchParams.append("page", page);
   url.searchParams.append("page_size", pageSize);
   if (eventType) {
