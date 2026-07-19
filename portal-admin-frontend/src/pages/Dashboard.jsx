@@ -137,7 +137,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Webhook Health Stats */}
+      {/* Webhook Health   Stats */}
       <section>
         <h2 className="text-lg font-semibold tracking-tight mb-4 text-foreground">Webhook Delivery Health</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
