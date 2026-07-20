@@ -66,6 +66,11 @@ class WebhookEventType(str, PyEnum):
     PAYMENT_STATUS_CHANGE = "payment_status_change"
 
 
+class CourseEnrollmentStatus(str, PyEnum):
+    ACTIVE = "active"
+    DROPPED = "dropped"
+
+
 class WebhookDeliveryStatus(str, PyEnum):
     PENDING = "pending"
     SENT = "sent"
@@ -114,13 +119,23 @@ class CourseEnrollment(SQLModel, table=True):
     student_id: int = Field(foreign_key="user.id", index=True)
     course_id: int = Field(foreign_key="course.id", index=True)
     enrolled_at: datetime = Field(default_factory=datetime.utcnow, sa_column=Column(DateTime, default=datetime.utcnow))
-    is_active: bool = Field(default=True)
+    status: CourseEnrollmentStatus = Field(default=CourseEnrollmentStatus.ACTIVE, sa_column=Column(SQLEnum(CourseEnrollmentStatus)))
 
     # Relationships
     student: Optional[User] = Relationship(back_populates="course_enrollments")
     course: Optional[Course] = Relationship(back_populates="enrollments")
 
     __table_args__ = (UniqueConstraint("student_id", "course_id", name="unique_student_course"),)
+
+
+class CourseSchedule(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    course_id: int = Field(foreign_key="course.id", index=True)
+    week_number: int = Field(ge=1, le=12)
+    weekday: int = Field(ge=0, le=6)
+
+    # Relationships
+    course: Optional[Course] = Relationship()
 
 
 class Attendance(SQLModel, table=True):

@@ -160,8 +160,12 @@ async def get_course_attendance_by_date(
     if not course:
         raise HTTPException(404, "Course not found")
 
-    students = get_students_for_course_on_date(session, course_id, date)
-    
+    # Fetch all enrollments for this course (both active and dropped)
+    enrollments = session.exec(
+        select(CourseEnrollment, User)
+        .join(User, CourseEnrollment.student_id == User.id)
+        .where(CourseEnrollment.course_id == course_id)
+    ).all()
     # Fetch existing attendance records for these students on this date
     attendances = session.exec(
         select(Attendance)
@@ -172,12 +176,13 @@ async def get_course_attendance_by_date(
     attendance_map = {a.student_id: a.status for a in attendances}
     
     result = []
-    for student in students:
+    for enrollment, student in enrollments:
         result.append({
             "student_id": student.id,
             "student_string_id": student.student_id,
             "full_name": student.full_name,
-            "status": attendance_map.get(student.id, None)
+            "status": attendance_map.get(student.id, None),
+            "enrollment_status": enrollment.status.value if hasattr(enrollment.status, 'value') else enrollment.status
         })
         
     return result
@@ -430,12 +435,10 @@ async def get_course_attendance(
                     "total": 0,
                     "present": 0,
                     "absent": 0,
-                    "warning_level": AttendanceWarningLevel.NONE
+                    "warning_level": a.warning_level # First seen is most recent due to order_by desc
                 }
             by_student[sid]["total"] += 1
             by_student[sid][a.status.value] += 1
-            if a.warning_level.value > by_student[sid]["warning_level"].value:
-                by_student[sid]["warning_level"] = a.warning_level
 
     return {
         "course": {

@@ -168,7 +168,7 @@ export default function Attendance() {
               >
                 <option value="">Select Course...</option>
                 {courses.map(c => (
-                  <option key={c.id} value={c.id}>{c.code} - {c.name}</option>
+                  <option key={c.id} value={c.id}>{c.code} - {c.name} ({c.credits}h)</option>
                 ))}
               </Select>
             </div>
@@ -227,7 +227,14 @@ export default function Attendance() {
                       onClick={() => handleCheckboxChange(student.student_id)}
                     >
                       <td className="px-6 py-3 whitespace-nowrap">
-                        <div className="text-sm font-medium text-foreground">{student.full_name}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-medium text-foreground">{student.full_name}</div>
+                          {student.enrollment_status === 'DROPPED' && (
+                            <div title="check with your TA">
+                              <Badge variant="danger" className="uppercase text-[10px]">Dropped</Badge>
+                            </div>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground">{student.student_string_id}</div>
                       </td>
                       <td className="px-6 py-3 whitespace-nowrap text-right">
@@ -272,7 +279,7 @@ export default function Attendance() {
               {courseAttendance ? `Roster Summary: ${courseAttendance.course.code}` : 'Course Summary'}
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              {courseAttendance ? courseAttendance.course.name : 'Select a course to view summary'}
+              {courseAttendance ? `${courseAttendance.course.name} (${courses.find(c => c.code === courseAttendance.course.code)?.credits}h)` : 'Select a course to view summary'}
             </p>
           </CardHeader>
           <div className="overflow-auto flex-1 bg-card">
@@ -301,7 +308,7 @@ export default function Attendance() {
                       <td className="px-4 py-3 whitespace-nowrap text-center text-sm font-medium">{data.absent}</td>
                       <td className="px-6 py-3 whitespace-nowrap text-sm">
                         {data.warning_level && data.warning_level !== 'none' ? (
-                           <Badge variant={data.warning_level === 'high' || data.warning_level === 'severe' ? 'danger' : 'warning'} className="uppercase text-[10px]">
+                           <Badge variant={data.warning_level === 'final_warning' ? 'danger' : 'warning'} className="uppercase text-[10px]">
                              {data.warning_level.replace('_', ' ')}
                            </Badge>
                         ) : (
