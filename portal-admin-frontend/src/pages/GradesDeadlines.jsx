@@ -1,73 +1,139 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { getStudents, getStudentSummary, publishAssessment, simulateDeadlineCheck } from '../api';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { getStudents, getStudentSummary, publishAssessment } from '../api';
 import { useToast } from '../hooks/useToast';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Skeleton } from '../components/ui/Skeleton';
-import { EmptyState } from '../components/ui/EmptyState';
-import Pagination from '../components/Pagination';
-import { BookOpen, Search, CheckCircle } from 'lucide-react';
+import { Search, ChevronDown } from 'lucide-react';
+
+function getAlphabeticalGrade(percentage) {
+  if (percentage == null) return '-';
+  if (percentage >= 90) return 'A+';
+  if (percentage >= 85) return 'A';
+  if (percentage >= 80) return 'A-';
+  if (percentage >= 75) return 'B+';
+  if (percentage >= 70) return 'B';
+  if (percentage >= 65) return 'B-';
+  if (percentage >= 60) return 'C+';
+  if (percentage >= 50) return 'C';
+  if (percentage >= 45) return 'C-';
+  if (percentage >= 40) return 'D';
+  return 'F';
+}
 
 export default function GradesDeadlines() {
   const { addToast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [loadingStudents, setLoadingStudents] = useState(true);
+  const [students, setStudents] = useState([]);
+  
+  // Student selection state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  
+  // Selected student data
+  const [loadingSummary, setLoadingSummary] = useState(false);
   const [assessments, setAssessments] = useState([]);
+  const [selectedCourse, setSelectedCourse] = useState('');
   
-  // Filters
-  const [searchQuery, setSearchQuery] = useState('');
-  const [courseFilter, setCourseFilter] = useState('All');
-  const [typeFilter, setTypeFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('All');
-  
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(15);
-
-  // Bulk / Inline Score State
-  const [selectedRows, setSelectedRows] = useState(new Set());
+  // Action state
+  const [actionLoading, setActionLoading] = useState(false);
   const [inlineScores, setInlineScores] = useState({});
+  const dropdownRef = useRef(null);
 
-  // API Tester State
-  const [testStudentId, setTestStudentId] = useState('');
-  const [testCourse, setTestCourse] = useState('');
-  const [testType, setTestType] = useState('midterm');
-  const [testResult, setTestResult] = useState(null);
-  
-  const fetchAllAssessments = async () => {
+  useEffect(() => {
+    async function fetchAllStudents() {
+      try {
+        setLoadingStudents(true);
+        const res = await getStudents(1, 200);
+        const list = Array.isArray(res) ? res : (res?.items || []);
+        setStudents(list);
+      } catch (err) {
+        addToast("Failed to fetch students", "error");
+      } finally {
+        setLoadingStudents(false);
+      }
+    }
+    fetchAllStudents();
+
+    // Close dropdown on click outside
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const loadStudentSummary = async (student) => {
     try {
-      setLoading(true);
-      const studentsRes = await getStudents(1, 200);
-      const studentsList = Array.isArray(studentsRes) ? studentsRes : (studentsRes?.items || []);
+      setLoadingSummary(true);
+      const summary = await getStudentSummary(student.id);
+      const studentAssessments = summary?.grades?.assessments || [];
+      setAssessments(studentAssessments);
       
-      const summaries = await Promise.all(
-        studentsList.map(s => getStudentSummary(s.id).catch(() => null))
-      );
-      
-      let allAssessments = [];
-      summaries.forEach((summary) => {
-        if (summary && summary.grades && summary.grades.assessments) {
-          summary.grades.assessments.forEach(assessment => {
-            allAssessments.push({
-              ...assessment,
-              student: summary.student
-            });
-          });
-        }
-      });
-      
-      setAssessments(allAssessments);
+      const courses = Array.from(new Set(studentAssessments.map(a => a.course_code)));
+      if (courses.length > 0 && !courses.includes(selectedCourse)) {
+        setSelectedCourse(courses[0]);
+      } else if (courses.length === 0) {
+        setSelectedCourse('');
+      }
     } catch (err) {
-      addToast(err.message || "Failed to fetch assessments", "error");
+      addToast("Failed to load student grades", "error");
     } finally {
-      setLoading(false);
+      setLoadingSummary(false);
     }
   };
 
-  useEffect(() => {
-    fetchAllAssessments();
-  }, []);
+  const handleSelectStudent = (student) => {
+    setSelectedStudent(student);
+    setSearchTerm(`${student.student_id} - ${student.name}`);
+    setIsDropdownOpen(false);
+    loadStudentSummary(student);
+  };
+
+  const filteredStudents = useMemo(() => {
+    if (!searchTerm) return students;
+    const lowerSearch = searchTerm.toLowerCase();
+    return students.filter(s => 
+      (s.name || '').toLowerCase().includes(lowerSearch) || 
+      (s.student_id || '').toLowerCase().includes(lowerSearch)
+    );
+  }, [students, searchTerm]);
+
+  const courses = useMemo(() => {
+    return Array.from(new Set(assessments.map(a => a.course_code))).sort();
+  }, [assessments]);
+
+  const coursework = useMemo(() => {
+    return assessments.filter(a => 
+      a.course_code === selectedCourse && 
+      a.assessment_type !== 'midterm' && 
+      a.assessment_type !== 'final'
+    );
+  }, [assessments, selectedCourse]);
+
+  const examSummary = useMemo(() => {
+    return courses.map(course_code => {
+      const midterm = assessments.find(a => a.course_code === course_code && a.assessment_type === 'midterm');
+      const final = assessments.find(a => a.course_code === course_code && a.assessment_type === 'final');
+      
+      const calcPercent = (assessment) => {
+        if (!assessment || !assessment.is_published || assessment.score == null) return null;
+        return (assessment.score / assessment.max_score) * 100;
+      };
+
+      return {
+        course_code,
+        midterm,
+        final,
+        midPercent: calcPercent(midterm),
+        finPercent: calcPercent(final)
+      };
+    });
+  }, [assessments, courses]);
 
   const handlePublish = async (assessment) => {
     const scoreStr = inlineScores[assessment.id];
@@ -80,328 +146,246 @@ export default function GradesDeadlines() {
       const score = parseFloat(scoreStr);
       await publishAssessment(assessment.id, { score });
       addToast(`Assessment published successfully`);
-      await fetchAllAssessments(); // Re-fetch to confirm update
+      await loadStudentSummary(selectedStudent);
     } catch (err) {
       addToast(err.message, "error");
     } finally {
       setActionLoading(false);
     }
   };
-
-  const handleBulkPublish = async () => {
-    const itemsToPublish = Array.from(selectedRows).map(id => assessments.find(a => a.id === id));
-    
-    // Validation
-    for (const item of itemsToPublish) {
-      const scoreStr = inlineScores[item.id];
-      if (scoreStr === undefined || scoreStr === '') {
-        addToast(`Error: Explicit score required for ${item.student?.name}'s ${item.title}. Bulk publish aborted.`, "error");
-        return;
-      }
-    }
-
-    try {
-      setActionLoading(true);
-      await Promise.all(itemsToPublish.map(item => {
-        const score = parseFloat(inlineScores[item.id]);
-        return publishAssessment(item.id, { score });
-      }));
-      addToast(`Successfully published ${itemsToPublish.length} assessments`);
-      setSelectedRows(new Set());
-      // Explicitly re-query to confirm they are now published
-      await fetchAllAssessments(); 
-    } catch (err) {
-      addToast(err.message, "error");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const toggleSelection = (id) => {
-    const newSet = new Set(selectedRows);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    setSelectedRows(newSet);
-  };
-
-  const toggleAll = (currentPageItems) => {
-    const unselected = currentPageItems.filter(item => !item.is_published && !selectedRows.has(item.id));
-    const newSet = new Set(selectedRows);
-    if (unselected.length > 0) {
-      unselected.forEach(item => newSet.add(item.id));
-    } else {
-      currentPageItems.forEach(item => newSet.delete(item.id));
-    }
-    setSelectedRows(newSet);
-  };
-
-  const handleRunDeadlineCheck = async () => {
-    try {
-      setActionLoading(true);
-      const res = await simulateDeadlineCheck();
-      addToast(res?.message || "Deadline check processed successfully");
-    } catch (err) {
-      addToast(err.message, "error");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleApiTest = async () => {
-    setTestResult('Testing...');
-    try {
-      const res = await fetch(`http://localhost:8000/api/grades/lookup?student_id=${testStudentId}&course_id=${testCourse}&assessment_type=${testType}`, {
-        headers: { 'X-API-Key': 'test-grades-key' }
-      });
-      if (res.status === 200) {
-        const data = await res.json();
-        setTestResult(`✅ 200 OK (Score: ${data.score}/${data.max_score})`);
-      } else if (res.status === 404) {
-        setTestResult(`❌ 404 Not Found`);
-      } else {
-        setTestResult(`⚠️ ${res.status} Error`);
-      }
-    } catch (err) {
-      setTestResult(`Error: ${err.message}`);
-    }
-  };
-
-  // Filter & Sort Data
-  const filteredAssessments = useMemo(() => {
-    const filtered = assessments.filter(a => {
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const sname = (a.student?.name || '').toLowerCase();
-        const sid = (a.student?.student_id || '').toLowerCase();
-        if (!sname.includes(q) && !sid.includes(q)) return false;
-      }
-      if (courseFilter !== 'All' && a.course_code !== courseFilter) return false;
-      if (typeFilter === 'remarkable') {
-        if (a.assessment_type !== 'midterm' && a.assessment_type !== 'final') return false;
-      } else if (typeFilter !== 'All' && a.assessment_type !== typeFilter) return false;
-      
-      if (statusFilter === 'Published' && !a.is_published) return false;
-      if (statusFilter === 'Pending' && a.is_published) return false;
-      
-      return true;
-    });
-
-    // Sort: Student Name -> Course -> Assessment Type
-    return filtered.sort((a, b) => {
-      const nameA = a.student?.name || '';
-      const nameB = b.student?.name || '';
-      if (nameA !== nameB) return nameA.localeCompare(nameB);
-      
-      const courseA = a.course_code || '';
-      const courseB = b.course_code || '';
-      if (courseA !== courseB) return courseA.localeCompare(courseB);
-      
-      const typeA = a.assessment_type || '';
-      const typeB = b.assessment_type || '';
-      return typeA.localeCompare(typeB);
-    });
-  }, [assessments, searchQuery, courseFilter, typeFilter, statusFilter]);
-
-  const uniqueCourses = useMemo(() => {
-    return Array.from(new Set(assessments.map(a => a.course_code))).sort();
-  }, [assessments]);
-
-  if (loading && assessments.length === 0) {
-    return (
-      <div className="space-y-8 animate-fade-in-up">
-        <Skeleton className="h-10 w-48 mb-2" />
-        <Card><div className="p-6 space-y-4">{Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div></Card>
-      </div>
-    );
-  }
-
-  const totalPages = Math.ceil(filteredAssessments.length / pageSize) || 1;
-  const currentAssessments = filteredAssessments.slice((page - 1) * pageSize, page * pageSize);
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Grades & Deadlines</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage assessment grades and trigger deadline webhooks</p>
-        </div>
-        <div>
-          <Button onClick={handleRunDeadlineCheck} disabled={actionLoading || loading} isLoading={actionLoading}>
-            Deadline Check Now
-          </Button>
-        </div>
+    <div className="space-y-6 max-w-5xl mx-auto animate-fade-in-up">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Student Grades Report</h1>
+        <p className="text-sm text-muted-foreground">Search and view a student's full academic record</p>
       </div>
 
-      {/* API Tester Utility */}
-      <Card className="p-4 bg-muted/20 border-blue-500/30 border">
-        <div className="flex flex-col sm:flex-row items-center gap-4">
-          <span className="font-semibold text-sm w-32">API Lookup Tester:</span>
-          <input 
-            type="text" 
-            placeholder="Student ID (STU-...)" 
-            className="text-sm px-3 py-1.5 border rounded-md" 
-            value={testStudentId} onChange={e => setTestStudentId(e.target.value)} 
-          />
-          <input 
-            type="text" 
-            placeholder="Course Code" 
-            className="text-sm px-3 py-1.5 border rounded-md" 
-            value={testCourse} onChange={e => setTestCourse(e.target.value)} 
-          />
-          <select className="text-sm px-3 py-1.5 border rounded-md bg-background" value={testType} onChange={e => setTestType(e.target.value)}>
-            <option value="midterm">Midterm</option>
-            <option value="final">Final</option>
-          </select>
-          <Button variant="outline" size="sm" onClick={handleApiTest}>Test</Button>
-          {testResult && <span className="text-sm font-medium">{testResult}</span>}
-        </div>
-      </Card>
-
-      <div className="flex flex-wrap gap-4 items-center bg-card p-4 rounded-lg border">
-        <div className="flex items-center bg-background border rounded-md px-3 py-1.5 min-w-[200px]">
-          <Search className="w-4 h-4 text-muted-foreground mr-2" />
-          <input 
-            type="text" 
-            placeholder="Search student..." 
-            className="bg-transparent border-none outline-none text-sm w-full"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
-        </div>
-        
-        <select className="text-sm px-3 py-1.5 border rounded-md bg-background" value={courseFilter} onChange={e => setCourseFilter(e.target.value)}>
-          <option value="All">All Courses</option>
-          {uniqueCourses.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        
-        <select className="text-sm px-3 py-1.5 border rounded-md bg-background" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-          <option value="All">All Statuses</option>
-          <option value="Pending">Pending</option>
-          <option value="Published">Published</option>
-        </select>
-
-        <select className="text-sm px-3 py-1.5 border rounded-md bg-background" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
-          <option value="All">All Types</option>
-          <option value="quiz">Quiz</option>
-          <option value="assignment">Assignment</option>
-          <option value="project">Project</option>
-          <option value="midterm">Midterm</option>
-          <option value="final">Final</option>
-        </select>
-
-        <Button 
-          variant={typeFilter === 'remarkable' ? "default" : "outline"}
-          size="sm"
-          className="ml-auto"
-          onClick={() => setTypeFilter(prev => prev === 'remarkable' ? 'All' : 'remarkable')}
-        >
-          {typeFilter === 'remarkable' && <CheckCircle className="w-4 h-4 mr-2" />}
-          Remarkable Only
-        </Button>
-      </div>
-
-      <Card className="flex flex-col overflow-hidden">
-        {selectedRows.size > 0 && (
-          <div className="bg-primary/5 border-b px-6 py-3 flex items-center justify-between">
-            <span className="text-sm font-medium">{selectedRows.size} pending assessment(s) selected</span>
-            <Button size="sm" onClick={handleBulkPublish} disabled={actionLoading}>
-              Bulk Publish
-            </Button>
+      {/* Student Selector */}
+      <Card className="p-4 bg-card border">
+        <div className="flex flex-col gap-2 relative" ref={dropdownRef}>
+          <label className="text-sm font-medium text-foreground">Select Student:</label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input 
+              type="text"
+              placeholder={loadingStudents ? "Loading students..." : "Search by name or ID..."}
+              className="w-full pl-9 pr-4 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setIsDropdownOpen(true);
+                if (selectedStudent && e.target.value !== `${selectedStudent.student_id} - ${selectedStudent.name}`) {
+                  setSelectedStudent(null);
+                  setAssessments([]);
+                }
+              }}
+              onFocus={() => setIsDropdownOpen(true)}
+              disabled={loadingStudents}
+            />
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           </div>
-        )}
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-border">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-6 py-3 text-left">
-                  <input type="checkbox" onChange={() => toggleAll(currentAssessments)} checked={currentAssessments.length > 0 && currentAssessments.filter(a => !a.is_published).every(a => selectedRows.has(a.id))} />
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Student</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Course</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assessment</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Score</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border bg-card">
-              {currentAssessments.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="p-0">
-                    <EmptyState icon={BookOpen} title="No Assessments Found" description="Try adjusting your filters." className="my-12" />
-                  </td>
-                </tr>
+
+          {isDropdownOpen && (
+            <ul className="absolute top-full left-0 right-0 mt-1 z-20 bg-card border rounded-md shadow-lg max-h-60 overflow-y-auto">
+              {filteredStudents.length > 0 ? (
+                filteredStudents.map(student => (
+                  <li 
+                    key={student.id} 
+                    onClick={() => handleSelectStudent(student)}
+                    className="px-4 py-2 text-sm hover:bg-muted cursor-pointer flex justify-between items-center"
+                  >
+                    <span className="font-medium text-foreground">{student.name}</span>
+                    <span className="text-muted-foreground text-xs">{student.student_id}</span>
+                  </li>
+                ))
               ) : (
-                currentAssessments.map((assessment) => {
-                  const isRemarkable = assessment.assessment_type === 'midterm' || assessment.assessment_type === 'final';
-                  return (
-                  <tr key={assessment.id} className="hover:bg-muted/50 transition-colors">
-                    <td className="px-6 py-4">
-                      {!assessment.is_published && (
-                        <input type="checkbox" checked={selectedRows.has(assessment.id)} onChange={() => toggleSelection(assessment.id)} />
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Link to={`/students/${assessment.student?.id || assessment.student_id}`} className="block group">
-                        <div className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-                          {assessment.student?.name || assessment.student_name || `Student ${assessment.student?.id}`}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {assessment.student?.student_id || ''}
-                        </div>
-                      </Link>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">
-                      {assessment.course_code}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                      {assessment.title}
-                      <span className="block mt-1">
-                        <Badge variant={isRemarkable ? "primary" : "outline"} className="capitalize">
-                          {assessment.assessment_type}
-                        </Badge>
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground flex items-center gap-1">
-                      {assessment.is_published ? (
-                        <span>{assessment.score} / {assessment.max_score}</span>
-                      ) : (
-                        <>
-                          <input 
-                            type="number" 
-                            className="w-16 px-2 py-1 text-sm border rounded"
-                            placeholder="-"
-                            value={inlineScores[assessment.id] || ''}
-                            onChange={e => setInlineScores(prev => ({...prev, [assessment.id]: e.target.value}))}
-                          />
-                          <span className="text-muted-foreground">/ {assessment.max_score}</span>
-                        </>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {assessment.is_published ? (
-                        <Badge variant="success">Published</Badge>
-                      ) : (
-                        <Badge variant="secondary">Pending</Badge>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      {!assessment.is_published && (
-                        <Button variant="outline" size="sm" onClick={() => handlePublish(assessment)} disabled={actionLoading}>
-                          Publish
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                )})
+                <li className="px-4 py-3 text-sm text-muted-foreground text-center">No students found</li>
               )}
-            </tbody>
-          </table>
+            </ul>
+          )}
         </div>
-        {filteredAssessments.length > 0 && (
-          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
-        )}
       </Card>
+
+      {selectedStudent && (
+        <div className="space-y-8 mt-8">
+          
+          {/* Header */}
+          <div className="text-center bg-muted/30 py-4 rounded-md border border-border/50">
+            <h2 className="text-lg font-bold text-foreground">
+              {selectedStudent.student_id} {selectedStudent.name}
+            </h2>
+          </div>
+
+          {loadingSummary ? (
+            <div className="space-y-4">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-40 w-full" />
+            </div>
+          ) : (
+            <>
+              {/* Course Selector & Coursework Table */}
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row gap-4 items-center">
+                  <label className="text-sm font-medium text-foreground whitespace-nowrap">Course:</label>
+                  <select 
+                    className="w-full p-2 text-sm border rounded-md bg-card focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={selectedCourse}
+                    onChange={(e) => setSelectedCourse(e.target.value)}
+                  >
+                    {courses.map(c => <option key={c} value={c}>{c}</option>)}
+                    {courses.length === 0 && <option value="">No courses found</option>}
+                  </select>
+                </div>
+
+                <div className="border rounded-md overflow-hidden bg-card">
+                  <table className="min-w-full divide-y divide-border">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Quiz/Assignment</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Element Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Grade</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Prof./Lecturer/TA</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {coursework.length === 0 ? (
+                        <tr><td colSpan="5" className="p-4 text-center text-sm text-muted-foreground">No coursework found for this course.</td></tr>
+                      ) : (
+                        coursework.map((item, index) => (
+                          <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-4 py-3 text-sm capitalize">{item.assessment_type} {index + 1}</td>
+                            <td className="px-4 py-3 text-sm">{item.title}</td>
+                            <td className="px-4 py-3 text-sm font-medium">
+                              {item.is_published ? (
+                                `${item.score} / ${item.max_score}`
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <input 
+                                    type="number" 
+                                    className="w-16 px-2 py-1 text-xs border rounded bg-background"
+                                    placeholder="Score"
+                                    value={inlineScores[item.id] || ''}
+                                    onChange={e => setInlineScores(prev => ({...prev, [item.id]: e.target.value}))}
+                                  />
+                                  <span className="text-muted-foreground">/ {item.max_score}</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-muted-foreground">Simulated Prof.</td>
+                            <td className="px-4 py-3 text-right">
+                              {!item.is_published && (
+                                <Button variant="outline" size="sm" onClick={() => handlePublish(item)} disabled={actionLoading}>
+                                  Publish
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Exam Results Table */}
+              <div className="space-y-3 mt-10">
+                <h3 className="text-sm font-medium text-foreground">Exam Results</h3>
+                <div className="border rounded-md overflow-hidden bg-card">
+                  <table className="min-w-full divide-y divide-border">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Course</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Mid-Term Percentage</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Final Percentage</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Final Grade (Alpha)</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">Actions (Unpublished)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {examSummary.length === 0 ? (
+                        <tr><td colSpan="5" className="p-4 text-center text-sm text-muted-foreground">No exams found.</td></tr>
+                      ) : (
+                        examSummary.map((summary) => (
+                          <tr key={summary.course_code} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-4 py-3 text-sm font-medium">{summary.course_code}</td>
+                            
+                            {/* Midterm Column */}
+                            <td className="px-4 py-3 text-sm">
+                              {summary.midterm ? (
+                                summary.midterm.is_published ? (
+                                  <span className="font-semibold">{summary.midPercent?.toFixed(4)} %</span>
+                                ) : (
+                                  <Badge variant="secondary">Pending ({summary.midterm.max_score} pts)</Badge>
+                                )
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </td>
+                            
+                            {/* Final % Column */}
+                            <td className="px-4 py-3 text-sm">
+                              {summary.final ? (
+                                summary.final.is_published ? (
+                                  <span className="font-semibold">{summary.finPercent?.toFixed(4)} %</span>
+                                ) : (
+                                  <Badge variant="secondary">Pending ({summary.final.max_score} pts)</Badge>
+                                )
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </td>
+
+                            {/* Final Alpha Column */}
+                            <td className="px-4 py-3 text-sm font-bold">
+                              {summary.final && summary.final.is_published ? (
+                                getAlphabeticalGrade(summary.finPercent)
+                              ) : '-'}
+                            </td>
+
+                            {/* Actions Column (Inline Publish for exams) */}
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex flex-col items-end gap-2">
+                                {summary.midterm && !summary.midterm.is_published && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">Mid:</span>
+                                    <input 
+                                      type="number" 
+                                      className="w-16 px-2 py-1 text-xs border rounded bg-background"
+                                      placeholder="Score"
+                                      value={inlineScores[summary.midterm.id] || ''}
+                                      onChange={e => setInlineScores(prev => ({...prev, [summary.midterm.id]: e.target.value}))}
+                                    />
+                                    <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => handlePublish(summary.midterm)} disabled={actionLoading}>Pub</Button>
+                                  </div>
+                                )}
+                                {summary.final && !summary.final.is_published && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">Fin:</span>
+                                    <input 
+                                      type="number" 
+                                      className="w-16 px-2 py-1 text-xs border rounded bg-background"
+                                      placeholder="Score"
+                                      value={inlineScores[summary.final.id] || ''}
+                                      onChange={e => setInlineScores(prev => ({...prev, [summary.final.id]: e.target.value}))}
+                                    />
+                                    <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => handlePublish(summary.final)} disabled={actionLoading}>Pub</Button>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
