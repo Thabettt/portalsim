@@ -168,6 +168,8 @@ class Payment(SQLModel, table=True):
     paid_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime))
     description: Optional[str] = Field(default=None, max_length=500)
     invoice_number: Optional[str] = Field(default=None, max_length=50, unique=True)
+    external_reference_id: Optional[str] = Field(default=None, unique=True, index=True)
+    source: str = Field(default="exam_remark", max_length=50)
     created_at: datetime = Field(default_factory=datetime.utcnow, sa_column=Column(DateTime, default=datetime.utcnow))
     updated_at: datetime = Field(default_factory=datetime.utcnow, sa_column=Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow))
 

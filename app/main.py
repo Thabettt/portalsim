@@ -58,8 +58,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.routers import admin, webhooks
+
 # Include routers
 app.include_router(admin.router)
+app.include_router(webhooks.router)
 
 # Mount static assets directory
 static_dir = os.path.join(os.path.dirname(__file__), "..", "portal-admin-frontend", "dist")
