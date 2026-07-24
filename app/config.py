@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     
     # Inbound Webhook Settings
     exam_remark_webhook_api_key: str = ""
+    grades_lookup_api_key: str = ""
 
     # Database
     database_url: str = "sqlite:///./university_portal.db"
