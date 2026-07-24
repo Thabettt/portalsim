@@ -191,8 +191,14 @@ export default function GradesDeadlines() {
       const nameA = a.student?.name || '';
       const nameB = b.student?.name || '';
       if (nameA !== nameB) return nameA.localeCompare(nameB);
-      if (a.course_code !== b.course_code) return a.course_code.localeCompare(b.course_code);
-      return a.assessment_type.localeCompare(b.assessment_type);
+      
+      const courseA = a.course_code || '';
+      const courseB = b.course_code || '';
+      if (courseA !== courseB) return courseA.localeCompare(courseB);
+      
+      const typeA = a.assessment_type || '';
+      const typeB = b.assessment_type || '';
+      return typeA.localeCompare(typeB);
     });
   }, [assessments, searchQuery, courseFilter, typeFilter, statusFilter]);
 
