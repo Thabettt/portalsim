@@ -50,6 +50,7 @@ def lookup_grade(
         .where(User.student_id == student_id)
         .where(Course.code == course_id)
         .where(Assessment.assessment_type == assessment_type_enum)
+        .where(Assessment.is_published == True)
     ).first()
     
     if not assessment:
