@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { getStudents, getStudentSummary, publishAssessment } from '../api';
+import { getStudents, getCourses, getStudentSummary, publishAssessment } from '../api';
 import { useToast } from '../hooks/useToast';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -7,25 +7,34 @@ import { Badge } from '../components/ui/Badge';
 import { Skeleton } from '../components/ui/Skeleton';
 import { Search, ChevronDown } from 'lucide-react';
 
-function getAlphabeticalGrade(percentage) {
-  if (percentage == null) return '-';
-  if (percentage >= 90) return 'A+';
-  if (percentage >= 85) return 'A';
-  if (percentage >= 80) return 'A-';
-  if (percentage >= 75) return 'B+';
-  if (percentage >= 70) return 'B';
-  if (percentage >= 65) return 'B-';
-  if (percentage >= 60) return 'C+';
-  if (percentage >= 50) return 'C';
-  if (percentage >= 45) return 'C-';
-  if (percentage >= 40) return 'D';
-  return 'F';
+function getAlphabeticalGrade(score) {
+  if (score == null) return '-';
+  if (score < 50) return 'F';
+  if (score < 55) return 'D';
+  if (score < 60) return 'D+';
+  if (score < 65) return 'C-';
+  if (score < 70) return 'C';
+  if (score < 74) return 'C+';
+  if (score < 78) return 'B-';
+  if (score < 82) return 'B';
+  if (score < 86) return 'B+';
+  if (score < 90) return 'A-';
+  if (score < 94) return 'A';
+  return 'A+';
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-';
+  return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 export default function GradesDeadlines() {
   const { addToast } = useToast();
-  const [loadingStudents, setLoadingStudents] = useState(true);
+  
+  // App-wide data
+  const [loadingData, setLoadingData] = useState(true);
   const [students, setStudents] = useState([]);
+  const [allCourses, setAllCourses] = useState([]);
   
   // Student selection state
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,7 +44,7 @@ export default function GradesDeadlines() {
   // Selected student data
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [assessments, setAssessments] = useState([]);
-  const [selectedCourse, setSelectedCourse] = useState('');
+  const [selectedCourseId, setSelectedCourseId] = useState('');
   
   // Action state
   const [actionLoading, setActionLoading] = useState(false);
@@ -43,19 +52,24 @@ export default function GradesDeadlines() {
   const dropdownRef = useRef(null);
 
   useEffect(() => {
-    async function fetchAllStudents() {
+    async function fetchData() {
       try {
-        setLoadingStudents(true);
-        const res = await getStudents(1, 200);
-        const list = Array.isArray(res) ? res : (res?.items || []);
-        setStudents(list);
+        setLoadingData(true);
+        const [studentsRes, coursesRes] = await Promise.all([
+          getStudents(1, 200),
+          getCourses(1, 200)
+        ]);
+        const sList = Array.isArray(studentsRes) ? studentsRes : (studentsRes?.items || []);
+        const cList = Array.isArray(coursesRes) ? coursesRes : (coursesRes?.items || []);
+        setStudents(sList);
+        setAllCourses(cList);
       } catch (err) {
-        addToast("Failed to fetch students", "error");
+        addToast("Failed to fetch initial data", "error");
       } finally {
-        setLoadingStudents(false);
+        setLoadingData(false);
       }
     }
-    fetchAllStudents();
+    fetchData();
 
     // Close dropdown on click outside
     const handleClickOutside = (e) => {
@@ -74,11 +88,11 @@ export default function GradesDeadlines() {
       const studentAssessments = summary?.grades?.assessments || [];
       setAssessments(studentAssessments);
       
-      const courses = Array.from(new Set(studentAssessments.map(a => a.course_code)));
-      if (courses.length > 0 && !courses.includes(selectedCourse)) {
-        setSelectedCourse(courses[0]);
-      } else if (courses.length === 0) {
-        setSelectedCourse('');
+      const courseIds = Array.from(new Set(studentAssessments.map(a => a.course_id)));
+      if (courseIds.length > 0 && !courseIds.includes(selectedCourseId)) {
+        setSelectedCourseId(courseIds[0]);
+      } else if (courseIds.length === 0) {
+        setSelectedCourseId('');
       }
     } catch (err) {
       addToast("Failed to load student grades", "error");
@@ -89,7 +103,7 @@ export default function GradesDeadlines() {
 
   const handleSelectStudent = (student) => {
     setSelectedStudent(student);
-    setSearchTerm(`${student.student_id} - ${student.name}`);
+    setSearchTerm(`${student.student_id} - ${student.full_name}`);
     setIsDropdownOpen(false);
     loadStudentSummary(student);
   };
@@ -98,27 +112,31 @@ export default function GradesDeadlines() {
     if (!searchTerm) return students;
     const lowerSearch = searchTerm.toLowerCase();
     return students.filter(s => 
-      (s.name || '').toLowerCase().includes(lowerSearch) || 
+      (s.full_name || '').toLowerCase().includes(lowerSearch) || 
       (s.student_id || '').toLowerCase().includes(lowerSearch)
     );
   }, [students, searchTerm]);
 
-  const courses = useMemo(() => {
-    return Array.from(new Set(assessments.map(a => a.course_code))).sort();
+  // Unique course IDs the student has assessments for
+  const studentCourseIds = useMemo(() => {
+    return Array.from(new Set(assessments.map(a => a.course_id))).sort();
   }, [assessments]);
 
   const coursework = useMemo(() => {
     return assessments.filter(a => 
-      a.course_code === selectedCourse && 
-      a.assessment_type !== 'midterm' && 
-      a.assessment_type !== 'final'
+      a.course_id === Number(selectedCourseId) && 
+      a.type?.toLowerCase() !== 'midterm' && 
+      a.type?.toLowerCase() !== 'final'
     );
-  }, [assessments, selectedCourse]);
+  }, [assessments, selectedCourseId]);
 
   const examSummary = useMemo(() => {
-    return courses.map(course_code => {
-      const midterm = assessments.find(a => a.course_code === course_code && a.assessment_type === 'midterm');
-      const final = assessments.find(a => a.course_code === course_code && a.assessment_type === 'final');
+    return studentCourseIds.map(course_id => {
+      const courseObj = allCourses.find(c => c.id === course_id);
+      const courseStr = courseObj ? `${courseObj.code} - ${courseObj.name}` : `Course ID ${course_id}`;
+      
+      const midterm = assessments.find(a => a.course_id === course_id && a.type?.toLowerCase() === 'midterm');
+      const final = assessments.find(a => a.course_id === course_id && a.type?.toLowerCase() === 'final');
       
       const calcPercent = (assessment) => {
         if (!assessment || !assessment.is_published || assessment.score == null) return null;
@@ -126,14 +144,15 @@ export default function GradesDeadlines() {
       };
 
       return {
-        course_code,
+        course_id,
+        courseStr,
         midterm,
         final,
         midPercent: calcPercent(midterm),
         finPercent: calcPercent(final)
       };
     });
-  }, [assessments, courses]);
+  }, [assessments, studentCourseIds, allCourses]);
 
   const handlePublish = async (assessment) => {
     const scoreStr = inlineScores[assessment.id];
@@ -162,26 +181,26 @@ export default function GradesDeadlines() {
       </div>
 
       {/* Student Selector */}
-      <Card className="p-4 bg-card border">
+      <Card className="p-4 bg-card border overflow-visible">
         <div className="flex flex-col gap-2 relative" ref={dropdownRef}>
           <label className="text-sm font-medium text-foreground">Select Student:</label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input 
               type="text"
-              placeholder={loadingStudents ? "Loading students..." : "Search by name or ID..."}
+              placeholder={loadingData ? "Loading students..." : "Search by name or ID..."}
               className="w-full pl-9 pr-4 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
                 setIsDropdownOpen(true);
-                if (selectedStudent && e.target.value !== `${selectedStudent.student_id} - ${selectedStudent.name}`) {
+                if (selectedStudent && e.target.value !== `${selectedStudent.student_id} - ${selectedStudent.full_name}`) {
                   setSelectedStudent(null);
                   setAssessments([]);
                 }
               }}
               onFocus={() => setIsDropdownOpen(true)}
-              disabled={loadingStudents}
+              disabled={loadingData}
             />
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           </div>
@@ -195,7 +214,7 @@ export default function GradesDeadlines() {
                     onClick={() => handleSelectStudent(student)}
                     className="px-4 py-2 text-sm hover:bg-muted cursor-pointer flex justify-between items-center"
                   >
-                    <span className="font-medium text-foreground">{student.name}</span>
+                    <span className="font-medium text-foreground">{student.full_name}</span>
                     <span className="text-muted-foreground text-xs">{student.student_id}</span>
                   </li>
                 ))
@@ -213,7 +232,7 @@ export default function GradesDeadlines() {
           {/* Header */}
           <div className="text-center bg-muted/30 py-4 rounded-md border border-border/50">
             <h2 className="text-lg font-bold text-foreground">
-              {selectedStudent.student_id} {selectedStudent.name}
+              {selectedStudent.student_id} {selectedStudent.full_name}
             </h2>
           </div>
 
@@ -230,11 +249,15 @@ export default function GradesDeadlines() {
                   <label className="text-sm font-medium text-foreground whitespace-nowrap">Course:</label>
                   <select 
                     className="w-full p-2 text-sm border rounded-md bg-card focus:outline-none focus:ring-1 focus:ring-primary"
-                    value={selectedCourse}
-                    onChange={(e) => setSelectedCourse(e.target.value)}
+                    value={selectedCourseId}
+                    onChange={(e) => setSelectedCourseId(e.target.value)}
                   >
-                    {courses.map(c => <option key={c} value={c}>{c}</option>)}
-                    {courses.length === 0 && <option value="">No courses found</option>}
+                    {studentCourseIds.map(cid => {
+                      const cObj = allCourses.find(c => c.id === cid);
+                      const name = cObj ? `${cObj.code} - ${cObj.name}` : `Course ID ${cid}`;
+                      return <option key={cid} value={cid}>{name}</option>;
+                    })}
+                    {studentCourseIds.length === 0 && <option value="">No courses found</option>}
                   </select>
                 </div>
 
@@ -255,7 +278,7 @@ export default function GradesDeadlines() {
                       ) : (
                         coursework.map((item, index) => (
                           <tr key={item.id} className="hover:bg-muted/30 transition-colors">
-                            <td className="px-4 py-3 text-sm capitalize">{item.assessment_type} {index + 1}</td>
+                            <td className="px-4 py-3 text-sm capitalize">{item.title}</td>
                             <td className="px-4 py-3 text-sm">{item.title}</td>
                             <td className="px-4 py-3 text-sm font-medium">
                               {item.is_published ? (
@@ -289,91 +312,112 @@ export default function GradesDeadlines() {
                 </div>
               </div>
 
-              {/* Exam Results Table */}
+              {/* Midterm Results Table */}
               <div className="space-y-3 mt-10">
-                <h3 className="text-sm font-medium text-foreground">Exam Results</h3>
+                <h3 className="text-sm font-medium text-foreground">Mid-Term Results</h3>
                 <div className="border rounded-md overflow-hidden bg-card">
                   <table className="min-w-full divide-y divide-border">
                     <thead className="bg-muted/50">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Course</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Mid-Term Percentage</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Final Percentage</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Final Grade (Alpha)</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Percentage</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Published Date</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">Actions (Unpublished)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {examSummary.length === 0 ? (
-                        <tr><td colSpan="5" className="p-4 text-center text-sm text-muted-foreground">No exams found.</td></tr>
+                      {examSummary.filter(s => s.midterm).length === 0 ? (
+                        <tr><td colSpan="4" className="p-4 text-center text-sm text-muted-foreground">No midterms found.</td></tr>
                       ) : (
-                        examSummary.map((summary) => (
-                          <tr key={summary.course_code} className="hover:bg-muted/30 transition-colors">
-                            <td className="px-4 py-3 text-sm font-medium">{summary.course_code}</td>
+                        examSummary.filter(s => s.midterm).map((summary) => (
+                          <tr key={summary.course_id} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-4 py-3 text-sm font-medium">{summary.courseStr}</td>
                             
-                            {/* Midterm Column */}
                             <td className="px-4 py-3 text-sm">
-                              {summary.midterm ? (
-                                summary.midterm.is_published ? (
-                                  <span className="font-semibold">{summary.midPercent?.toFixed(4)} %</span>
-                                ) : (
-                                  <Badge variant="secondary">Pending ({summary.midterm.max_score} pts)</Badge>
-                                )
+                              {summary.midterm.is_published ? (
+                                <span className="font-semibold">{summary.midPercent?.toFixed(2)} %</span>
                               ) : (
-                                <span className="text-muted-foreground">-</span>
+                                <Badge variant="secondary">Pending ({summary.midterm.max_score} pts)</Badge>
                               )}
                             </td>
                             
-                            {/* Final % Column */}
-                            <td className="px-4 py-3 text-sm">
-                              {summary.final ? (
-                                summary.final.is_published ? (
-                                  <span className="font-semibold">{summary.finPercent?.toFixed(4)} %</span>
-                                ) : (
-                                  <Badge variant="secondary">Pending ({summary.final.max_score} pts)</Badge>
-                                )
-                              ) : (
-                                <span className="text-muted-foreground">-</span>
-                              )}
+                            <td className="px-4 py-3 text-sm text-muted-foreground">
+                              {summary.midterm.is_published ? formatDate(summary.midterm.published_at) : '-'}
                             </td>
 
-                            {/* Final Alpha Column */}
-                            <td className="px-4 py-3 text-sm font-bold">
-                              {summary.final && summary.final.is_published ? (
-                                getAlphabeticalGrade(summary.finPercent)
-                              ) : '-'}
-                            </td>
-
-                            {/* Actions Column (Inline Publish for exams) */}
                             <td className="px-4 py-3 text-right">
-                              <div className="flex flex-col items-end gap-2">
-                                {summary.midterm && !summary.midterm.is_published && (
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs text-muted-foreground">Mid:</span>
-                                    <input 
-                                      type="number" 
-                                      className="w-16 px-2 py-1 text-xs border rounded bg-background"
-                                      placeholder="Score"
-                                      value={inlineScores[summary.midterm.id] || ''}
-                                      onChange={e => setInlineScores(prev => ({...prev, [summary.midterm.id]: e.target.value}))}
-                                    />
-                                    <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => handlePublish(summary.midterm)} disabled={actionLoading}>Pub</Button>
-                                  </div>
-                                )}
-                                {summary.final && !summary.final.is_published && (
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs text-muted-foreground">Fin:</span>
-                                    <input 
-                                      type="number" 
-                                      className="w-16 px-2 py-1 text-xs border rounded bg-background"
-                                      placeholder="Score"
-                                      value={inlineScores[summary.final.id] || ''}
-                                      onChange={e => setInlineScores(prev => ({...prev, [summary.final.id]: e.target.value}))}
-                                    />
-                                    <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => handlePublish(summary.final)} disabled={actionLoading}>Pub</Button>
-                                  </div>
-                                )}
-                              </div>
+                              {!summary.midterm.is_published && (
+                                <div className="flex items-center justify-end gap-2">
+                                  <input 
+                                    type="number" 
+                                    className="w-16 px-2 py-1 text-xs border rounded bg-background"
+                                    placeholder="Score"
+                                    value={inlineScores[summary.midterm.id] || ''}
+                                    onChange={e => setInlineScores(prev => ({...prev, [summary.midterm.id]: e.target.value}))}
+                                  />
+                                  <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => handlePublish(summary.midterm)} disabled={actionLoading}>Pub</Button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Final Results Table */}
+              <div className="space-y-3 mt-10">
+                <h3 className="text-sm font-medium text-foreground">Final Results</h3>
+                <div className="border rounded-md overflow-hidden bg-card">
+                  <table className="min-w-full divide-y divide-border">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Course</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Percentage</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Alphabetical Grade</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Published Date</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">Actions (Unpublished)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {examSummary.filter(s => s.final).length === 0 ? (
+                        <tr><td colSpan="5" className="p-4 text-center text-sm text-muted-foreground">No finals found.</td></tr>
+                      ) : (
+                        examSummary.filter(s => s.final).map((summary) => (
+                          <tr key={summary.course_id} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-4 py-3 text-sm font-medium">{summary.courseStr}</td>
+                            
+                            <td className="px-4 py-3 text-sm">
+                              {summary.final.is_published ? (
+                                <span className="font-semibold">{summary.finPercent?.toFixed(2)} %</span>
+                              ) : (
+                                <Badge variant="secondary">Pending ({summary.final.max_score} pts)</Badge>
+                              )}
+                            </td>
+
+                            <td className="px-4 py-3 text-sm font-bold">
+                              {summary.final.is_published ? getAlphabeticalGrade(summary.finPercent) : '-'}
+                            </td>
+                            
+                            <td className="px-4 py-3 text-sm text-muted-foreground">
+                              {summary.final.is_published ? formatDate(summary.final.published_at) : '-'}
+                            </td>
+
+                            <td className="px-4 py-3 text-right">
+                              {!summary.final.is_published && (
+                                <div className="flex items-center justify-end gap-2">
+                                  <input 
+                                    type="number" 
+                                    className="w-16 px-2 py-1 text-xs border rounded bg-background"
+                                    placeholder="Score"
+                                    value={inlineScores[summary.final.id] || ''}
+                                    onChange={e => setInlineScores(prev => ({...prev, [summary.final.id]: e.target.value}))}
+                                  />
+                                  <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => handlePublish(summary.final)} disabled={actionLoading}>Pub</Button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         ))

@@ -84,16 +84,14 @@ def fire_grade_published_webhook(session: Session, assessment: Assessment):
         event_type=SchemaWebhookEventType.GRADE_PUBLISHED,
         student_id=student.student_id,
         student_name=student.full_name,
-        student_email=student.email,
-        assessment_id=assessment.id,
-        assessment_title=assessment.title,
-        assessment_type=assessment.assessment_type.value,
         course_code=course.code,
         course_name=course.name,
+        assessment_type=assessment.assessment_type.value,
+        assessment_name=assessment.title,
         score=assessment.score,
         max_score=assessment.max_score,
-        weight=assessment.weight,
-        percentage=round(percentage, 2)
+        percentage=round(percentage, 2),
+        published_at=assessment.published_at
     )
     create_webhook_log_sync(
         session,

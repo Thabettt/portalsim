@@ -43,7 +43,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="p-4 md:p-8 max-w-7xl w-full mx-auto min-h-full">
+              <div className="p-4 md:p-8 pb-20 md:pb-24 max-w-7xl w-full mx-auto min-h-full">
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/attendance" element={<Attendance />} />

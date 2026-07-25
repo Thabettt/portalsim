@@ -393,13 +393,21 @@ def create_assessments(session: Session, students: list, courses: list):
             due_date = base_date + timedelta(days=random.randint(-20, 30))
             max_score = 100 if atype in [AssessmentType.MIDTERM, AssessmentType.FINAL] else 50
 
-            is_published = random.random() < 0.6
-            score = None
-            published_at = None
-
-            if is_published:
+            if atype in [AssessmentType.MIDTERM, AssessmentType.FINAL]:
+                is_published = True
                 score = round(random.uniform(40, 95), 1)
-                published_at = datetime.utcnow() - timedelta(days=random.randint(1, 30))
+                if random.random() < 0.7:
+                    published_at = datetime.utcnow() - timedelta(days=random.uniform(0, 3))
+                else:
+                    published_at = datetime.utcnow() - timedelta(days=random.uniform(3.01, 30))
+            else:
+                is_published = random.random() < 0.6
+                score = None
+                published_at = None
+
+                if is_published:
+                    score = round(random.uniform(40, 95), 1)
+                    published_at = datetime.utcnow() - timedelta(days=random.randint(1, 30))
 
             assessment = Assessment(
                 course_id=enrollment.course_id,
@@ -517,6 +525,76 @@ def create_system_settings(session: Session):
     logger.info("Created default system settings")
 
 
+def create_exam_remark_test_fixtures(session: Session, courses: list):
+    """Create specific deterministic test cases for exam remark testing."""
+    test_student = User(
+        student_id="STU-9999-0001",
+        email="remark.test@giu-uni.edu.eg",
+        full_name="Remark Test User",
+        role=UserRole.STUDENT,
+        hashed_password="demo_hash",
+        is_active=True
+    )
+    session.add(test_student)
+    session.commit()
+    session.refresh(test_student)
+
+    test_courses = courses[:5]
+    
+    for course in test_courses:
+        enrollment = CourseEnrollment(
+            student_id=test_student.id,
+            course_id=course.id,
+            status=CourseEnrollmentStatus.ACTIVE
+        )
+        session.add(enrollment)
+    session.commit()
+
+    base_date = date.today()
+    fixtures = []
+
+    def add_paired_fixtures(course_idx, title_suffix, score, max_score, is_pub, days_ago):
+        if len(test_courses) > course_idx:
+            cid = test_courses[course_idx].id
+            pub_date = datetime.utcnow() - timedelta(days=days_ago) if is_pub else None
+            # Midterm
+            fixtures.append(Assessment(
+                course_id=cid, student_id=test_student.id,
+                assessment_type=AssessmentType.MIDTERM,
+                title=f"Midterm ({title_suffix})",
+                max_score=max_score, score=score, weight=1.0,
+                is_published=is_pub, published_at=pub_date, due_date=base_date
+            ))
+            # Final
+            fixtures.append(Assessment(
+                course_id=cid, student_id=test_student.id,
+                assessment_type=AssessmentType.FINAL,
+                title=f"Final Exam ({title_suffix})",
+                max_score=max_score, score=score, weight=1.5,
+                is_published=is_pub, published_at=pub_date, due_date=base_date
+            ))
+
+    # Case 1: A+ Case (score=96, max=100)
+    add_paired_fixtures(0, "A+ Case", 96.0, 100.0, True, 2)
+    
+    # Case 2: Boundary 87 (score=87, max=100)
+    add_paired_fixtures(1, "Boundary 87", 87.0, 100.0, True, 2)
+    
+    # Case 3: Unpublished
+    add_paired_fixtures(2, "Unpublished", None, 100.0, False, 0)
+    
+    # Case 4: Custom Max 75 (score=60, max=75)
+    add_paired_fixtures(3, "Custom Max 75", 60.0, 75.0, True, 2)
+    
+    # Case 5: Older than 3 days
+    add_paired_fixtures(4, "Old Publish", 85.0, 100.0, True, 7)
+        
+    for f in fixtures:
+        session.add(f)
+    session.commit()
+    logger.info("Created exam remark test fixtures for Remark Test User (STU-9999-0001)")
+
+
 async def seed_database(session: Session = None):
     """Main seed function"""
     if session is None:
@@ -556,6 +634,9 @@ async def seed_database(session: Session = None):
     create_internships(session, students)
     create_webhook_settings(session)
     create_system_settings(session)
+    
+    # Add deterministic fixtures
+    create_exam_remark_test_fixtures(session, courses)
 
     logger.info("Database seeding completed!")
 
