@@ -6,6 +6,8 @@ services:
     container_name: university-portal-sim
     ports:
       - "8080:8080"
+    env_file:
+      - .env
     volumes:
       # Map the database file so it persists between container restarts
       # Create an empty 'university_portal.db' on the server first if it doesn't exist
