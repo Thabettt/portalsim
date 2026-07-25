@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header, status
 from pydantic import BaseModel
 from sqlmodel import Session, select
 from typing import Optional
+from datetime import datetime
 
 from app.db import get_session
 from app.models import Assessment, User, Course, AssessmentType
@@ -24,6 +25,7 @@ class GradeLookupResponse(BaseModel):
     assessment_type: str
     score: float
     max_score: float
+    published_at: Optional[datetime] = None
 
 @router.get("/lookup", response_model=GradeLookupResponse)
 def lookup_grade(
@@ -60,10 +62,16 @@ def lookup_grade(
         )
         
     # Return 200 OK with data
+    published_at_utc = None
+    if assessment.published_at:
+        from datetime import timezone
+        published_at_utc = assessment.published_at.replace(tzinfo=timezone.utc)
+
     return GradeLookupResponse(
         student_id=student_id,
         course_id=course_id,
         assessment_type=assessment_type,
         score=assessment.score or 0.0,
-        max_score=assessment.max_score
+        max_score=assessment.max_score,
+        published_at=published_at_utc
     )

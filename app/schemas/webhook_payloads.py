@@ -1,3 +1,4 @@
+from app.schemas.custom_types import UTCDateTime
 import uuid
 from datetime import datetime, date
 from typing import Optional, Literal, Union
@@ -9,7 +10,7 @@ class BaseWebhookPayload(BaseModel):
     """Base webhook payload with common fields"""
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     event_type: WebhookEventType
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: UTCDateTime = Field(default_factory=datetime.utcnow)
 
 
 # Payment Reminder Payload
@@ -37,7 +38,7 @@ class InternshipStatusUpdatePayload(BaseWebhookPayload):
     previous_status: str
     new_status: str
     approved_by: Optional[str] = None
-    approved_at: Optional[datetime] = None
+    approved_at: Optional[UTCDateTime] = None
     rejection_reason: Optional[str] = None
 
 
@@ -66,7 +67,7 @@ class GradePublishedPayload(BaseWebhookPayload):
     score: float
     max_score: float
     percentage: float
-    published_at: datetime
+    published_at: UTCDateTime
 
 
 # Deadline Reminder Payload
@@ -77,7 +78,7 @@ class DeadlineReminderPayload(BaseWebhookPayload):
     course_code: str
     course_name: str
     title: str
-    due_at: datetime
+    due_at: UTCDateTime
     reminder_offset: str
 
 
