@@ -44,7 +44,7 @@ def lookup_grade(
             detail=f"Invalid assessment_type. Must be one of: {[e.value for e in AssessmentType]}"
         )
         
-    # Query for exact match
+    # Step 1: Does the assessment exist at all (regardless of publication)?
     assessment = session.exec(
         select(Assessment)
         .join(User, Assessment.student_id == User.id)
@@ -52,13 +52,19 @@ def lookup_grade(
         .where(User.student_id == student_id)
         .where(Course.code == course_id)
         .where(Assessment.assessment_type == assessment_type_enum)
-        .where(Assessment.is_published == True)
     ).first()
-    
+
     if not assessment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No matching grade record found."
+        )
+
+    # Step 2: Is it published?
+    if not assessment.is_published:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Grade exists but has not been published yet."
         )
         
     # Return 200 OK with data
