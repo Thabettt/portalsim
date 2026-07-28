@@ -57,12 +57,19 @@ class InternshipStatus(str, Enum):
     COMPLETED = "completed"
 
 
+class ProgressReportStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class WebhookEventType(str, Enum):
     ATTENDANCE_ALERT = "attendance_alert"
     PAYMENT_REMINDER = "payment_reminder"
     DEADLINE_REMINDER = "deadline_reminder"
     GRADE_PUBLISHED = "grade_published"
     INTERNSHIP_STATUS_UPDATE = "internship_status_update"
+    PROGRESS_REPORT_STATUS_UPDATE = "progress_report_status_update"
     ATTENDANCE_MARKED = "attendance_marked"
     PAYMENT_STATUS_CHANGE = "payment_status_change"
 
@@ -397,17 +404,16 @@ class GradePublishedPayload(WebhookBasePayload):
 
 class InternshipStatusUpdatePayload(WebhookBasePayload):
     event_type: WebhookEventType = WebhookEventType.INTERNSHIP_STATUS_UPDATE
-    student_id: str
-    student_name: str
     student_email: str
-    internship_id: int
-    company_name: str
-    position: str
-    previous_status: InternshipStatus
+    internship_title: str
     new_status: InternshipStatus
-    approved_by: Optional[str] = None
-    approved_at: Optional[datetime] = None
-    rejection_reason: Optional[str] = None
+
+
+class ProgressReportStatusUpdatePayload(WebhookBasePayload):
+    event_type: WebhookEventType = WebhookEventType.PROGRESS_REPORT_STATUS_UPDATE
+    new_status: ProgressReportStatus
+    progress_report_number: int
+    student_email: str
 
 
 class AttendanceMarkedPayload(WebhookBasePayload):
@@ -443,6 +449,7 @@ WebhookPayload = Union[
     DeadlineReminderPayload,
     GradePublishedPayload,
     InternshipStatusUpdatePayload,
+    ProgressReportStatusUpdatePayload,
     AttendanceMarkedPayload,
     PaymentStatusChangePayload
 ]
@@ -468,9 +475,43 @@ class AttendanceBatchMarkRequest(BaseModel):
     records: List[AttendanceBatchRecord]
 
 
+class AttendanceWarningChange(BaseModel):
+    course_id: int
+    warning_level: AttendanceWarningLevel
+
+
+class AttendanceWarningBatchUpdateRequest(BaseModel):
+    changes: List[AttendanceWarningChange]
+
+
 class InternshipDecisionRequest(BaseModel):
     status: InternshipStatus
     rejection_reason: Optional[str] = Field(None, max_length=500)
+
+
+class ProgressReportCreateRequest(BaseModel):
+    summary: Optional[str] = Field(None, max_length=2000)
+
+
+class ProgressReportDecisionRequest(BaseModel):
+    status: ProgressReportStatus
+    review_notes: Optional[str] = Field(None, max_length=1000)
+
+
+class ProgressReportRead(BaseModel):
+    id: int
+    internship_id: int
+    report_number: int
+    summary: Optional[str]
+    status: ProgressReportStatus
+    review_notes: Optional[str]
+    submitted_at: datetime
+    reviewed_at: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 class AssessmentPublishRequest(BaseModel):

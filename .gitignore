@@ -1,6 +1,7 @@
 # Environments
 .env
 .venv
+.runtime-venv/
 env/
 venv/
 ENV/
@@ -14,6 +15,7 @@ university_portal.db
 __pycache__/
 *.py[cod]
 *$py.class
+.codex-*.log
 
 # OS
 .DS_Store

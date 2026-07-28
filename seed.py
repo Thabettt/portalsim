@@ -11,7 +11,7 @@ from sqlmodel import Session, select, func, delete
 from app.db import engine, create_db_and_tables
 from app.models import (
     User, Course, CourseEnrollment, Attendance, Payment,
-    Assessment, Internship, WebhookSetting, SystemSetting,
+    Assessment, Internship, InternshipProgressReport, WebhookSetting, SystemSetting,
     WebhookLog, CourseSchedule,
     UserRole, AttendanceStatus, AttendanceWarningLevel,
     PaymentStatus, PaymentType, AssessmentType, InternshipStatus,
@@ -532,6 +532,7 @@ async def seed_database(session: Session = None):
 
     # Clear existing data (in dependency order)
     session.exec(delete(WebhookLog))
+    session.exec(delete(InternshipProgressReport))
     session.exec(delete(Internship))
     session.exec(delete(Assessment))
     session.exec(delete(Payment))

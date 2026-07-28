@@ -6,9 +6,9 @@ from sqlalchemy import delete as sqlalchemy_delete
 from app.db import get_session
 from app.models import (
     User, Course, CourseEnrollment, Attendance, Payment,
-    Assessment, Internship, WebhookSetting, WebhookLog,
+    Assessment, Internship, InternshipProgressReport, WebhookSetting, WebhookLog,
     SystemSetting, WebhookEventType, WebhookDeliveryStatus,
-    PaymentStatus, InternshipStatus, AttendanceStatus,
+    PaymentStatus, InternshipStatus, ProgressReportStatus, AttendanceStatus,
     AttendanceWarningLevel, AssessmentType, UserRole
 )
 from app.schemas import (
@@ -17,12 +17,14 @@ from app.schemas import (
     AssessmentCreate, AssessmentRead, InternshipCreate, InternshipRead,
     WebhookSettingCreate, WebhookSettingRead, WebhookSettingUpdate,
     WebhookLogRead, SystemStateResponse, SeedResponse,
-    AttendanceMarkRequest, AttendanceBatchMarkRequest, InternshipDecisionRequest,
+    AttendanceMarkRequest, AttendanceBatchMarkRequest, AttendanceWarningBatchUpdateRequest, InternshipDecisionRequest,
+    ProgressReportCreateRequest, ProgressReportDecisionRequest,
     AssessmentPublishRequest, PaginatedResponse
 )
 from app.services.attendance import (
     mark_attendance, simulate_day_end_attendance,
-    get_student_attendance_summary, get_students_for_course_on_date
+    get_student_attendance_summary, get_students_for_course_on_date,
+    get_student_warning_report, update_student_warning_levels
 )
 from app.services.payments import (
     simulate_payment_reminders, get_student_payment_summary
@@ -31,7 +33,18 @@ from app.services.grades_internships import (
     publish_assessment_grade, simulate_deadline_check,
     update_internship_status, get_student_grades_summary
 )
-from app.services.webhook_sender import get_webhook_logs, process_pending_webhooks
+from app.services.webhook_sender import deliver_webhook, get_webhook_logs
+from app.services.n8n_attendance import (
+    AttendanceFinalizationError,
+    AttendanceFinalizationNotConfigured,
+    send_attendance_snapshot,
+)
+from app.services.internship_progress import (
+    create_progress_report,
+    list_approved_internships,
+    list_pending_progress_reports,
+    update_progress_report_status,
+)
 # from app.config import get_settings as get_app_config  # Not used directly
 import logging
 
@@ -47,6 +60,7 @@ async def seed_database(session: Session = Depends(get_session)):
     session.exec(sqlalchemy_delete(Attendance))
     session.exec(sqlalchemy_delete(Payment))
     session.exec(sqlalchemy_delete(Assessment))
+    session.exec(sqlalchemy_delete(InternshipProgressReport))
     session.exec(sqlalchemy_delete(Internship))
     session.exec(sqlalchemy_delete(CourseEnrollment))
     session.exec(sqlalchemy_delete(Course))
@@ -68,6 +82,7 @@ async def reset_database(session: Session = Depends(get_session)):
     session.exec(sqlalchemy_delete(Attendance))
     session.exec(sqlalchemy_delete(Payment))
     session.exec(sqlalchemy_delete(Assessment))
+    session.exec(sqlalchemy_delete(InternshipProgressReport))
     session.exec(sqlalchemy_delete(Internship))
     session.exec(sqlalchemy_delete(CourseEnrollment))
     session.exec(sqlalchemy_delete(Course))
@@ -210,6 +225,54 @@ async def batch_mark_attendance(
     return {"message": f"Successfully marked attendance for {len(request.records)} students"}
 
 
+@router.get("/students/{student_id}/attendance-warnings")
+async def get_attendance_warnings(
+    student_id: int,
+    include_good: bool = Query(False),
+    session: Session = Depends(get_session)
+):
+    """Get a student's latest warning state, hiding Level 0 by default."""
+    student = session.get(User, student_id)
+    if not student or student.role != UserRole.STUDENT:
+        raise HTTPException(404, "Student not found")
+
+    return {
+        "student": {
+            "id": student.id,
+            "student_id": student.student_id,
+            "name": student.full_name,
+        },
+        "warnings": get_student_warning_report(session, student_id, include_good),
+    }
+
+
+@router.put("/students/{student_id}/attendance-warnings")
+async def update_attendance_warnings(
+    student_id: int,
+    request: AttendanceWarningBatchUpdateRequest,
+    session: Session = Depends(get_session)
+):
+    """Save TA warning corrections and emit correction notifications."""
+    student = session.get(User, student_id)
+    if not student or student.role != UserRole.STUDENT:
+        raise HTTPException(404, "Student not found")
+
+    try:
+        updated = update_student_warning_levels(
+            session,
+            student,
+            [change.model_dump() for change in request.changes],
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    return {
+        "message": f"Saved {len(updated)} warning change(s)",
+        "updated": updated,
+        "warnings": get_student_warning_report(session, student_id),
+    }
+
+
 @router.post("/internships/{internship_id}/decision", response_model=InternshipRead)
 async def decide_internship(
     internship_id: int,
@@ -217,15 +280,71 @@ async def decide_internship(
     session: Session = Depends(get_session)
 ):
     """Approve or reject an internship application"""
-    internship = update_internship_status(
+    if request.status not in {InternshipStatus.APPROVED, InternshipStatus.REJECTED}:
+        raise HTTPException(400, "An internship decision must be approved or rejected")
+    result = update_internship_status(
         session=session,
         internship_id=internship_id,
         new_status=request.status,
         rejection_reason=request.rejection_reason
     )
-    if not internship:
+    if not result:
         raise HTTPException(404, "Internship not found")
+    internship, webhook_log = result
+    if webhook_log:
+        await deliver_webhook(session, webhook_log)
     return internship
+
+
+@router.get("/internships/approved")
+async def get_approved_internships(session: Session = Depends(get_session)):
+    """List internships that can submit bi-weekly progress reports."""
+    return list_approved_internships(session)
+
+
+@router.post("/internships/{internship_id}/progress-reports")
+async def submit_progress_report(
+    internship_id: int,
+    request: ProgressReportCreateRequest,
+    session: Session = Depends(get_session),
+):
+    """Create the next numbered bi-weekly report for an approved internship."""
+    try:
+        report = create_progress_report(session, internship_id, request.summary)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not report:
+        raise HTTPException(404, "Internship not found")
+    return report
+
+
+@router.get("/internship-progress-reports/pending")
+async def get_pending_progress_reports(session: Session = Depends(get_session)):
+    """List submitted bi-weekly reports awaiting approval or rejection."""
+    return list_pending_progress_reports(session)
+
+
+@router.post("/internship-progress-reports/{report_id}/decision")
+async def decide_progress_report(
+    report_id: int,
+    request: ProgressReportDecisionRequest,
+    session: Session = Depends(get_session),
+):
+    """Approve or reject a bi-weekly report and queue its webhook event."""
+    try:
+        result = update_progress_report_status(
+            session,
+            report_id,
+            request.status,
+            request.review_notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not result:
+        raise HTTPException(404, "Progress report not found")
+    report, webhook_log = result
+    await deliver_webhook(session, webhook_log)
+    return report
 
 
 @router.post("/assessments/{assessment_id}/publish", response_model=AssessmentRead)
@@ -273,12 +392,16 @@ async def retry_webhook(
     log_id: int,
     session: Session = Depends(get_session)
 ):
-    """Manually retry a failed webhook"""
+    """Immediately deliver a pending or previously failed webhook."""
     webhook_log = session.get(WebhookLog, log_id)
     if not webhook_log:
         raise HTTPException(404, "Webhook log not found")
 
-    if webhook_log.status not in [WebhookDeliveryStatus.FAILED, WebhookDeliveryStatus.RETRYING]:
+    if webhook_log.status not in [
+        WebhookDeliveryStatus.PENDING,
+        WebhookDeliveryStatus.FAILED,
+        WebhookDeliveryStatus.RETRYING,
+    ]:
         raise HTTPException(400, "Webhook is not in a retryable state")
 
     webhook_log.status = WebhookDeliveryStatus.PENDING
@@ -288,8 +411,8 @@ async def retry_webhook(
     session.add(webhook_log)
     session.commit()
 
-    # Process immediately
-    await process_pending_webhooks(session)
+    # Deliver this exact event immediately, regardless of unrelated queued logs.
+    await deliver_webhook(session, webhook_log)
 
     return {"message": "Webhook retry initiated", "log_id": log_id}
 
@@ -528,3 +651,14 @@ async def list_pending_internships(session: Session = Depends(get_session)):
         result.append(i_dict)
         
     return result
+
+
+@router.post("/attendance/finalize-day")
+async def finalize_attendance_day(session: Session = Depends(get_session)):
+    """Send the complete saved attendance-warning snapshot to n8n."""
+    try:
+        return await send_attendance_snapshot(session)
+    except AttendanceFinalizationNotConfigured as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except AttendanceFinalizationError as exc:
+        raise HTTPException(502, str(exc)) from exc

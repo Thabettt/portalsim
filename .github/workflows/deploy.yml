@@ -25,4 +25,4 @@ jobs:
             git pull origin master
             
             # Rebuild and restart the Docker container seamlessly
-            docker compose up -d --build
+            N8N_ATTENDANCE_WEBHOOK_URL='${{ secrets.N8N_ATTENDANCE_WEBHOOK_URL }}' N8N_INTERNSHIP_STATUS_WEBHOOK_URL='${{ secrets.N8N_INTERNSHIP_STATUS_WEBHOOK_URL }}' N8N_PROGRESS_REPORT_STATUS_WEBHOOK_URL='${{ secrets.N8N_PROGRESS_REPORT_STATUS_WEBHOOK_URL }}' docker compose up -d --build

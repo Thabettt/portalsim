@@ -28,17 +28,16 @@ class PaymentReminderPayload(BaseWebhookPayload):
 # Internship Status Update Payload
 class InternshipStatusUpdatePayload(BaseWebhookPayload):
     event_type: Literal[WebhookEventType.INTERNSHIP_STATUS_UPDATE] = WebhookEventType.INTERNSHIP_STATUS_UPDATE
-    student_id: str
-    student_name: str
     student_email: str
-    internship_id: int
-    company_name: str
-    position: str
-    previous_status: str
+    internship_title: str
     new_status: str
-    approved_by: Optional[str] = None
-    approved_at: Optional[datetime] = None
-    rejection_reason: Optional[str] = None
+
+
+class ProgressReportStatusUpdatePayload(BaseWebhookPayload):
+    event_type: Literal[WebhookEventType.PROGRESS_REPORT_STATUS_UPDATE] = WebhookEventType.PROGRESS_REPORT_STATUS_UPDATE
+    new_status: str
+    progress_report_number: int
+    student_email: str
 
 
 # Attendance Alert Payload
@@ -110,6 +109,7 @@ class PaymentStatusChangePayload(BaseWebhookPayload):
 WebhookPayload = Union[
     PaymentReminderPayload,
     InternshipStatusUpdatePayload,
+    ProgressReportStatusUpdatePayload,
     AttendanceAlertPayload,
     GradePublishedPayload,
     DeadlineReminderPayload,
@@ -137,17 +137,17 @@ EXAMPLE_PAYLOADS = {
         "event_id": "550e8400-e29b-41d4-a716-446655440001",
         "event_type": "internship_status_update",
         "timestamp": "2026-07-18T10:00:00Z",
-        "student_id": "STU-2023-0142",
-        "student_name": "Ahmed Hassan",
         "student_email": "ahmed.hassan@example.com",
-        "internship_id": 1,
-        "company_name": "Tech Corp",
-        "position": "Software Engineering Intern",
-        "previous_status": "PENDING",
-        "new_status": "APPROVED",
-        "approved_by": "Dr. Sarah Admin",
-        "approved_at": "2026-07-18T10:05:00Z",
-        "rejection_reason": None
+        "internship_title": "Software Engineering Intern",
+        "new_status": "approved"
+    },
+    "progress_report_status_update": {
+        "event_id": "550e8400-e29b-41d4-a716-446655440005",
+        "event_type": "progress_report_status_update",
+        "timestamp": "2026-07-18T10:00:00Z",
+        "new_status": "approved",
+        "progress_report_number": 2,
+        "student_email": "ahmed.hassan@example.com"
     },
     "attendance_alert": {
         "event_id": "550e8400-e29b-41d4-a716-446655440002",

@@ -56,12 +56,19 @@ class InternshipStatus(str, PyEnum):
     COMPLETED = "completed"
 
 
+class ProgressReportStatus(str, PyEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class WebhookEventType(str, PyEnum):
     ATTENDANCE_ALERT = "attendance_alert"
     PAYMENT_REMINDER = "payment_reminder"
     DEADLINE_REMINDER = "deadline_reminder"
     GRADE_PUBLISHED = "grade_published"
     INTERNSHIP_STATUS_UPDATE = "internship_status_update"
+    PROGRESS_REPORT_STATUS_UPDATE = "progress_report_status_update"
     ATTENDANCE_MARKED = "attendance_marked"
     PAYMENT_STATUS_CHANGE = "payment_status_change"
 
@@ -214,6 +221,29 @@ class Internship(SQLModel, table=True):
 
     # Relationships
     student: Optional[User] = Relationship(back_populates="internships", sa_relationship_kwargs={"foreign_keys": "Internship.student_id"})
+    progress_reports: List["InternshipProgressReport"] = Relationship(back_populates="internship")
+
+
+class InternshipProgressReport(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    internship_id: int = Field(foreign_key="internship.id", index=True)
+    report_number: int = Field(ge=1)
+    summary: Optional[str] = Field(default=None, sa_column=Column(Text))
+    status: ProgressReportStatus = Field(
+        default=ProgressReportStatus.PENDING,
+        sa_column=Column(SQLEnum(ProgressReportStatus)),
+    )
+    review_notes: Optional[str] = Field(default=None, max_length=1000)
+    submitted_at: datetime = Field(default_factory=datetime.utcnow, sa_column=Column(DateTime, default=datetime.utcnow))
+    reviewed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime))
+    created_at: datetime = Field(default_factory=datetime.utcnow, sa_column=Column(DateTime, default=datetime.utcnow))
+    updated_at: datetime = Field(default_factory=datetime.utcnow, sa_column=Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow))
+
+    internship: Optional[Internship] = Relationship(back_populates="progress_reports")
+
+    __table_args__ = (
+        UniqueConstraint("internship_id", "report_number", name="unique_internship_progress_report_number"),
+    )
 
 
 class WebhookSetting(SQLModel, table=True):

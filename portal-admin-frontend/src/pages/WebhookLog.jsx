@@ -16,6 +16,7 @@ const EVENT_TYPES = [
   "deadline_reminder",
   "grade_published",
   "internship_status_update",
+  "progress_report_status_update",
   "attendance_marked",
   "payment_status_change"
 ];
@@ -187,7 +188,7 @@ export default function WebhookLog() {
                         {log.attempt_number}/{log.max_retries}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                        {['failed', 'retrying'].includes(log.status) && (
+                        {['pending', 'failed', 'retrying'].includes(log.status) && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -213,9 +214,12 @@ export default function WebhookLog() {
                               <pre className="bg-[#1e1e2e] text-[#a6accd] p-4 rounded-md text-[11px] overflow-x-auto shadow-inner border border-[#181825]">
                                 {(() => {
                                   try {
-                                    return JSON.stringify(JSON.parse(log.payload), null, 2);
+                                    const payload = typeof log.payload === 'string'
+                                      ? JSON.parse(log.payload)
+                                      : log.payload;
+                                    return JSON.stringify(payload, null, 2);
                                   } catch (e) {
-                                    return log.payload;
+                                    return String(log.payload);
                                   }
                                 })()}
                               </pre>

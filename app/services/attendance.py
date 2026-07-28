@@ -221,6 +221,109 @@ def get_students_for_course_on_date(
     return students
 
 
+def get_student_warning_report(
+    session: Session,
+    student_id: int,
+    include_good: bool = False
+) -> List[dict]:
+    """Return the latest warning state for every enrolled course."""
+    enrollments = session.exec(
+        select(CourseEnrollment, Course)
+        .join(Course, CourseEnrollment.course_id == Course.id)
+        .where(CourseEnrollment.student_id == student_id)
+        .order_by(Course.code)
+    ).all()
+
+    report = []
+    for enrollment, course in enrollments:
+        latest = session.exec(
+            select(Attendance)
+            .where(Attendance.student_id == student_id)
+            .where(Attendance.course_id == course.id)
+            .order_by(Attendance.date.desc(), Attendance.marked_at.desc())
+        ).first()
+        warning_level = latest.warning_level if latest else AttendanceWarningLevel.NONE
+
+        if not include_good and warning_level == AttendanceWarningLevel.NONE:
+            continue
+
+        report.append({
+            "course_id": course.id,
+            "course_code": course.code,
+            "course_name": course.name,
+            "warning_level": warning_level.value,
+            "last_updated": latest.marked_at.isoformat() if latest else None,
+            "enrollment_status": enrollment.status.value,
+        })
+
+    return report
+
+
+def update_student_warning_levels(
+    session: Session,
+    student: User,
+    changes: List[dict]
+) -> List[dict]:
+    """Apply TA warning corrections to the latest attendance records."""
+    updated = []
+
+    for change in changes:
+        course_id = change["course_id"]
+        new_level = AttendanceWarningLevel(change["warning_level"])
+        course = session.get(Course, course_id)
+        if not course:
+            raise ValueError(f"Course {course_id} not found")
+
+        attendance = session.exec(
+            select(Attendance)
+            .where(Attendance.student_id == student.id)
+            .where(Attendance.course_id == course_id)
+            .order_by(Attendance.date.desc(), Attendance.marked_at.desc())
+        ).first()
+        if not attendance:
+            raise ValueError(f"No attendance record exists for {course.code}")
+
+        old_level = attendance.warning_level
+        if old_level == new_level:
+            continue
+
+        attendance.warning_level = new_level
+        attendance.marked_at = datetime.utcnow()
+        session.add(attendance)
+
+        enrollment = session.exec(
+            select(CourseEnrollment)
+            .where(CourseEnrollment.student_id == student.id)
+            .where(CourseEnrollment.course_id == course_id)
+        ).first()
+        if enrollment:
+            enrollment.status = (
+                CourseEnrollmentStatus.DROPPED
+                if new_level == AttendanceWarningLevel.FINAL_WARNING
+                else CourseEnrollmentStatus.ACTIVE
+            )
+            session.add(enrollment)
+
+        session.commit()
+        session.refresh(attendance)
+
+        fire_attendance_alert(
+            session,
+            student,
+            course,
+            attendance,
+            new_level,
+            get_absence_count(session, student.id, course_id),
+        )
+        updated.append({
+            "course_id": course_id,
+            "previous_warning_level": old_level.value,
+            "warning_level": new_level.value,
+        })
+
+    return updated
+
+
 def get_courses_with_sessions_on_date(session: Session, attendance_date: date) -> List[Course]:
     """Get courses that have sessions on a given date based on CourseSchedule"""
     if attendance_date.weekday() in (4, 5):  # Friday or Saturday

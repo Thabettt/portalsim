@@ -6,6 +6,10 @@ services:
     container_name: university-portal-sim
     ports:
       - "8080:8080"
+    environment:
+      N8N_ATTENDANCE_WEBHOOK_URL: ${N8N_ATTENDANCE_WEBHOOK_URL:-}
+      N8N_INTERNSHIP_STATUS_WEBHOOK_URL: ${N8N_INTERNSHIP_STATUS_WEBHOOK_URL:-}
+      N8N_PROGRESS_REPORT_STATUS_WEBHOOK_URL: ${N8N_PROGRESS_REPORT_STATUS_WEBHOOK_URL:-}
     volumes:
       # Map the database file so it persists between container restarts
       # Create an empty 'university_portal.db' on the server first if it doesn't exist

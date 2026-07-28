@@ -3,7 +3,7 @@ from typing import List, Optional
 from sqlmodel import Session, select, func
 from app.models import (
     User, Course, Assessment, AssessmentType, Internship, InternshipStatus,
-    WebhookEventType, WebhookSetting
+    WebhookEventType, WebhookLog, WebhookSetting
 )
 from app.services.webhook_sender import create_webhook_log_sync, fire_webhook
 from app.schemas.webhook_payloads import (
@@ -214,13 +214,12 @@ def update_internship_status(
     new_status: InternshipStatus,
     approved_by: Optional[int] = None,
     rejection_reason: Optional[str] = None
-) -> Optional[Internship]:
+) -> Optional[tuple[Internship, Optional[WebhookLog]]]:
     """Update internship status and fire webhook"""
     internship = session.get(Internship, internship_id)
     if not internship:
         return None
 
-    old_status = internship.status
     internship.status = new_status
     internship.updated_at = datetime.utcnow()
 
@@ -235,41 +234,27 @@ def update_internship_status(
     session.refresh(internship)
 
     # Fire webhook
-    fire_internship_status_webhook(session, internship, old_status)
+    webhook_log = fire_internship_status_webhook(session, internship)
 
-    return internship
+    return internship, webhook_log
 
 
 def fire_internship_status_webhook(
     session: Session,
     internship: Internship,
-    old_status: InternshipStatus
-):
+) -> Optional[WebhookLog]:
     """Fire internship status update webhook"""
     student = session.get(User, internship.student_id)
     if not student:
-        return
-
-    approved_by_name = None
-    if internship.approved_by:
-        approver = session.get(User, internship.approved_by)
-        approved_by_name = approver.full_name if approver else None
+        return None
 
     payload = InternshipStatusUpdatePayload(
         event_type=SchemaWebhookEventType.INTERNSHIP_STATUS_UPDATE,
-        student_id=student.student_id,
-        student_name=student.full_name,
         student_email=student.email,
-        internship_id=internship.id,
-        company_name=internship.company_name,
-        position=internship.position,
-        previous_status=old_status.value,
+        internship_title=internship.position,
         new_status=internship.status.value,
-        approved_by=approved_by_name,
-        approved_at=internship.approved_at,
-        rejection_reason=internship.rejection_reason
     )
-    create_webhook_log_sync(
+    webhook_log = create_webhook_log_sync(
         session,
         WebhookEventType.INTERNSHIP_STATUS_UPDATE,
         payload,
@@ -277,6 +262,7 @@ def fire_internship_status_webhook(
         internship_id=internship.id
     )
     logger.info(f"Internship status webhook fired: {student.student_id} - {internship.company_name} - {internship.status.value}")
+    return webhook_log
 
 
 def get_student_grades_summary(session: Session, student_id: int) -> dict:

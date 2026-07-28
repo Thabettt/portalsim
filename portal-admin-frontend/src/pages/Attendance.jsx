@@ -9,6 +9,7 @@ import { Badge } from '../components/ui/Badge';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ClipboardList, GraduationCap, Users } from 'lucide-react';
+import AttendanceWarnings from './AttendanceWarnings';
 
 export default function Attendance() {
   const { addToast } = useToast();
@@ -330,6 +331,8 @@ export default function Attendance() {
           </div>
         </Card>
       </div>
+
+      <AttendanceWarnings />
     </div>
   );
 }

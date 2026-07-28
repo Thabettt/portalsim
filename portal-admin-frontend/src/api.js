@@ -91,6 +91,21 @@ export async function batchMarkAttendance(payload) {
   });
 }
 
+export async function getStudentAttendanceWarnings(studentId) {
+  return fetchApi(`/admin/students/${studentId}/attendance-warnings`);
+}
+
+export async function updateStudentAttendanceWarnings(studentId, changes) {
+  return fetchApi(`/admin/students/${studentId}/attendance-warnings`, {
+    method: "PUT",
+    body: JSON.stringify({ changes }),
+  });
+}
+
+export async function finalizeAttendanceDay() {
+  return fetchApi("/admin/attendance/finalize-day", { method: "POST" });
+}
+
 // ==== INTERNSHIPS ====
 export async function getPendingInternships(page = 1, pageSize = 50) {
   return fetchApi(`/admin/internships/pending?page=${page}&page_size=${pageSize}`);
@@ -98,6 +113,28 @@ export async function getPendingInternships(page = 1, pageSize = 50) {
 
 export async function makeInternshipDecision(internshipId, payload) {
   return fetchApi(`/admin/internships/${internshipId}/decision`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getApprovedInternships() {
+  return fetchApi("/admin/internships/approved");
+}
+
+export async function submitInternshipProgressReport(internshipId, payload) {
+  return fetchApi(`/admin/internships/${internshipId}/progress-reports`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getPendingProgressReports() {
+  return fetchApi("/admin/internship-progress-reports/pending");
+}
+
+export async function makeProgressReportDecision(reportId, payload) {
+  return fetchApi(`/admin/internship-progress-reports/${reportId}/decision`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

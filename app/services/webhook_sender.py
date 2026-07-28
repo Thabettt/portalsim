@@ -18,6 +18,34 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+def _get_active_webhook_setting(session: Session) -> Optional[WebhookSetting]:
+    return session.exec(
+        select(WebhookSetting).where(WebhookSetting.is_active == True)
+    ).first()
+
+
+def _resolve_webhook_target(
+    session: Session,
+    event_type: WebhookEventType,
+) -> tuple[str, str]:
+    """Return the event-specific target, falling back to the generic DB setting."""
+    event_targets = {
+        WebhookEventType.INTERNSHIP_STATUS_UPDATE:
+            settings.n8n_internship_status_webhook_url.strip(),
+        WebhookEventType.PROGRESS_REPORT_STATUS_UPDATE:
+            settings.n8n_progress_report_status_webhook_url.strip(),
+    }
+    event_target = event_targets.get(event_type, "")
+    webhook_setting = _get_active_webhook_setting(session)
+
+    if event_target:
+        shared_secret = webhook_setting.shared_secret if webhook_setting else settings.shared_secret
+        return event_target, shared_secret
+    if webhook_setting and webhook_setting.webhook_target_url.strip():
+        return webhook_setting.webhook_target_url.strip(), webhook_setting.shared_secret
+    return "NO_TARGET", ""
+
+
 def generate_signature(payload: str, secret: str) -> str:
     """Generate HMAC-SHA256 signature for webhook payload"""
     return hmac.new(
@@ -74,11 +102,9 @@ def create_webhook_log_sync(
     internship_id: Optional[int] = None
 ) -> WebhookLog:
     """Create webhook log synchronously (gets settings from DB)"""
-    webhook_setting = session.exec(
-        select(WebhookSetting).where(WebhookSetting.is_active == True)
-    ).first()
+    target_url, shared_secret = _resolve_webhook_target(session, event_type)
 
-    if not webhook_setting or not webhook_setting.webhook_target_url:
+    if target_url == "NO_TARGET":
         logger.warning(f"No active webhook setting found for event {event_type}. Logging only.")
         # Still create log entry but mark as no target
         payload_dict = payload.model_dump() if hasattr(payload, "model_dump") else payload
@@ -108,8 +134,8 @@ def create_webhook_log_sync(
         session,
         event_type,
         payload_dict,
-        webhook_setting.webhook_target_url,
-        webhook_setting.shared_secret,
+        target_url,
+        shared_secret,
         student_id=student_id,
         course_id=course_id,
         payment_id=payment_id,
@@ -133,20 +159,10 @@ async def deliver_webhook(
         logger.info(f"[WEBHOOK LOGGED] type={webhook_log.event_type.value} target=local status=200")
         return True
 
-    webhook_setting = session.exec(
-        select(WebhookSetting).where(WebhookSetting.is_active == True)
-    ).first()
-
-    if not webhook_setting:
-        webhook_log.status = WebhookDeliveryStatus.FAILED
-        webhook_log.error_message = "No active webhook configuration"
-        webhook_log.completed_at = datetime.utcnow()
-        session.add(webhook_log)
-        session.commit()
-        return False
-
     payload_json = webhook_log.payload
-    signature = generate_signature(payload_json, webhook_setting.shared_secret)
+    webhook_setting = _get_active_webhook_setting(session)
+    shared_secret = webhook_setting.shared_secret if webhook_setting else settings.shared_secret
+    signature = generate_signature(payload_json, shared_secret)
 
     headers = {
         "Content-Type": "application/json",
@@ -253,11 +269,9 @@ async def fire_webhook(
 
     # Get webhook settings
     with Session(engine) as session:
-        webhook_setting = session.exec(
-            select(WebhookSetting).where(WebhookSetting.is_active == True)
-        ).first()
+        target_url, shared_secret = _resolve_webhook_target(session, event_type)
 
-        if not webhook_setting or not webhook_setting.webhook_target_url:
+        if target_url == "NO_TARGET":
             # Still log locally
             create_webhook_log(
                 session,
@@ -279,8 +293,8 @@ async def fire_webhook(
             session,
             event_type,
             payload,
-            webhook_setting.webhook_target_url,
-            webhook_setting.shared_secret,
+            target_url,
+            shared_secret,
             student_id=student_id,
             course_id=course_id,
             payment_id=payment_id,
