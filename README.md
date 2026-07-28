@@ -52,6 +52,9 @@ uvicorn app.main:app --reload
 | `SCHEDULER_TIMEZONE` | `UTC` | Timezone for scheduled jobs |
 | `WEBHOOK_MAX_RETRIES` | `3` | Max delivery attempts |
 | `WEBHOOK_RETRY_DELAYS` | `5,30,120` | Seconds between retries |
+| `N8N_ATTENDANCE_WEBHOOK_URL` | *(empty)* | n8n production webhook used by Finalize End of Day. |
+| `N8N_INTERNSHIP_STATUS_WEBHOOK_URL` | *(empty)* | n8n production webhook for internship approval or rejection. |
+| `N8N_PROGRESS_REPORT_STATUS_WEBHOOK_URL` | *(empty)* | n8n production webhook for bi-weekly progress-report approval or rejection. |
 
 ---
 
