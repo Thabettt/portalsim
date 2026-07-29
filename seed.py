@@ -380,6 +380,11 @@ def create_assessments(session: Session, students: list, courses: list):
 
     assessments = []
     base_date = date.today()
+    today_midnight = datetime.combine(base_date, datetime.min.time())
+    
+    # Deterministic day offsets for testing all cases of midterm/final remarks
+    midterm_final_cases = [0, 1, 2, 3, 4, 10]
+    mf_case_idx = 0
 
     for enrollment in enrollments:
         num_assessments = random.randint(3, 5)
@@ -396,10 +401,9 @@ def create_assessments(session: Session, students: list, courses: list):
             if atype in [AssessmentType.MIDTERM, AssessmentType.FINAL]:
                 is_published = True
                 score = round(random.uniform(40, 95), 1)
-                if random.random() < 0.7:
-                    published_at = datetime.utcnow() - timedelta(days=random.uniform(0, 3))
-                else:
-                    published_at = datetime.utcnow() - timedelta(days=random.uniform(3.01, 30))
+                days_ago = midterm_final_cases[mf_case_idx % len(midterm_final_cases)]
+                published_at = today_midnight - timedelta(days=days_ago)
+                mf_case_idx += 1
             else:
                 is_published = random.random() < 0.6
                 score = None
@@ -407,7 +411,7 @@ def create_assessments(session: Session, students: list, courses: list):
 
                 if is_published:
                     score = round(random.uniform(40, 95), 1)
-                    published_at = datetime.utcnow() - timedelta(days=random.randint(1, 30))
+                    published_at = today_midnight - timedelta(days=random.randint(1, 30))
 
             assessment = Assessment(
                 course_id=enrollment.course_id,
@@ -551,12 +555,13 @@ def create_exam_remark_test_fixtures(session: Session, courses: list):
     session.commit()
 
     base_date = date.today()
+    today_midnight = datetime.combine(base_date, datetime.min.time())
     fixtures = []
 
     def add_paired_fixtures(course_idx, title_suffix, score, max_score, is_pub, days_ago):
         if len(test_courses) > course_idx:
             cid = test_courses[course_idx].id
-            pub_date = datetime.utcnow() - timedelta(days=days_ago) if is_pub else None
+            pub_date = today_midnight - timedelta(days=days_ago) if is_pub else None
             # Midterm
             fixtures.append(Assessment(
                 course_id=cid, student_id=test_student.id,
