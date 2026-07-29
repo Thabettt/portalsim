@@ -117,7 +117,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
       </nav>
 
       <div className="p-4 border-t border-border bg-muted/20">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <div className="relative flex items-center justify-center">
               <div className={`w-2 h-2 rounded-full ${isHealthy ? 'bg-emerald-500' : 'bg-red-500'}`}></div>

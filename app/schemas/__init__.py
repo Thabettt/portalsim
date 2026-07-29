@@ -1,3 +1,4 @@
+from app.schemas.custom_types import UTCDateTime
 from datetime import datetime, date
 from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, Field, EmailStr
@@ -103,8 +104,8 @@ class UserUpdate(BaseModel):
 class UserRead(UserBase):
     id: int
     is_active: bool
-    created_at: datetime
-    updated_at: datetime
+    created_at: UTCDateTime
+    updated_at: UTCDateTime
 
     class Config:
         from_attributes = True
@@ -135,7 +136,7 @@ class CourseUpdate(BaseModel):
 
 class CourseRead(CourseBase):
     id: int
-    created_at: datetime
+    created_at: UTCDateTime
 
     class Config:
         from_attributes = True
@@ -150,7 +151,7 @@ class CourseEnrollmentRead(BaseModel):
     id: int
     student_id: int
     course_id: int
-    enrolled_at: datetime
+    enrolled_at: UTCDateTime
     is_active: bool
 
     class Config:
@@ -179,8 +180,8 @@ class AttendanceRead(AttendanceBase):
     id: int
     warning_level: AttendanceWarningLevel
     marked_by: Optional[int]
-    marked_at: datetime
-    created_at: datetime
+    marked_at: UTCDateTime
+    created_at: UTCDateTime
 
     class Config:
         from_attributes = True
@@ -209,9 +210,9 @@ class PaymentRead(PaymentBase):
     id: int
     status: PaymentStatus
     paid_amount: float
-    paid_at: Optional[datetime]
-    created_at: datetime
-    updated_at: datetime
+    paid_at: Optional[UTCDateTime]
+    created_at: UTCDateTime
+    updated_at: UTCDateTime
 
     class Config:
         from_attributes = True
@@ -243,9 +244,9 @@ class AssessmentRead(AssessmentBase):
     id: int
     score: Optional[float]
     is_published: bool
-    published_at: Optional[datetime]
-    created_at: datetime
-    updated_at: datetime
+    published_at: Optional[UTCDateTime]
+    created_at: UTCDateTime
+    updated_at: UTCDateTime
 
     class Config:
         from_attributes = True
@@ -278,10 +279,10 @@ class InternshipRead(InternshipBase):
     id: int
     status: InternshipStatus
     approved_by: Optional[int]
-    approved_at: Optional[datetime]
+    approved_at: Optional[UTCDateTime]
     rejection_reason: Optional[str]
-    created_at: datetime
-    updated_at: datetime
+    created_at: UTCDateTime
+    updated_at: UTCDateTime
 
     class Config:
         from_attributes = True
@@ -306,8 +307,8 @@ class WebhookSettingUpdate(BaseModel):
 class WebhookSettingRead(WebhookSettingBase):
     id: int
     is_active: bool
-    created_at: datetime
-    updated_at: datetime
+    created_at: UTCDateTime
+    updated_at: UTCDateTime
 
     class Config:
         from_attributes = True
@@ -324,10 +325,10 @@ class WebhookLogRead(BaseModel):
     error_message: Optional[str]
     attempt_number: int
     max_retries: int
-    next_retry_at: Optional[datetime]
-    created_at: datetime
-    sent_at: Optional[datetime]
-    completed_at: Optional[datetime]
+    next_retry_at: Optional[UTCDateTime]
+    created_at: UTCDateTime
+    sent_at: Optional[UTCDateTime]
+    completed_at: Optional[UTCDateTime]
     student_id: Optional[int]
     course_id: Optional[int]
     payment_id: Optional[int]
@@ -341,7 +342,7 @@ class WebhookLogRead(BaseModel):
 # ===== Webhook Payload Contracts =====
 class WebhookBasePayload(BaseModel):
     event_type: WebhookEventType
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: UTCDateTime = Field(default_factory=datetime.utcnow)
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 

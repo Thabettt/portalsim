@@ -8,9 +8,13 @@ class Settings(BaseSettings):
     # Webhook Configuration
     webhook_target_url: str = ""
     shared_secret: str = "dev-secret-change-in-production"
-    n8n_attendance_webhook_url: str = ""
+        n8n_attendance_webhook_url: str = ""
     n8n_internship_status_webhook_url: str = ""
     n8n_progress_report_status_webhook_url: str = ""
+
+    # Inbound Webhook Settings
+    exam_remark_webhook_api_key: str = ""
+    grades_lookup_api_key: str = ""
 
     # Database
     database_url: str = "sqlite:///./university_portal.db"
