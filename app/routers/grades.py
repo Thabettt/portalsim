@@ -27,6 +27,13 @@ class GradeLookupResponse(BaseModel):
     max_score: float
     published_at: Optional[datetime] = None
 
+class GradeUpdateRequest(BaseModel):
+    student_id: str
+    course_id: str
+    assessment_type: str
+    score: float
+
+
 @router.get("/lookup", response_model=GradeLookupResponse)
 def lookup_grade(
     student_id: str,
@@ -77,6 +84,60 @@ def lookup_grade(
         student_id=student_id,
         course_id=course_id,
         assessment_type=assessment_type,
+        score=assessment.score or 0.0,
+        max_score=assessment.max_score,
+        published_at=published_at_utc
+    )
+
+@router.patch("/update", response_model=GradeLookupResponse)
+def update_grade(
+    request: GradeUpdateRequest,
+    session: Session = Depends(get_session),
+    api_key: str = Depends(verify_grades_api_key)
+):
+    try:
+        assessment_type_enum = AssessmentType(request.assessment_type)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid assessment_type. Must be one of: {[e.value for e in AssessmentType]}"
+        )
+        
+    assessment = session.exec(
+        select(Assessment)
+        .join(User, Assessment.student_id == User.id)
+        .join(Course, Assessment.course_id == Course.id)
+        .where(User.student_id == request.student_id)
+        .where(Course.code == request.course_id)
+        .where(Assessment.assessment_type == assessment_type_enum)
+    ).first()
+
+    if not assessment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No matching grade record found."
+        )
+
+    if not assessment.is_published:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Grade exists but has not been published yet."
+        )
+        
+    assessment.score = request.score
+    session.add(assessment)
+    session.commit()
+    session.refresh(assessment)
+
+    published_at_utc = None
+    if assessment.published_at:
+        from datetime import timezone
+        published_at_utc = assessment.published_at.replace(tzinfo=timezone.utc)
+
+    return GradeLookupResponse(
+        student_id=request.student_id,
+        course_id=request.course_id,
+        assessment_type=request.assessment_type,
         score=assessment.score or 0.0,
         max_score=assessment.max_score,
         published_at=published_at_utc
