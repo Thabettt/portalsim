@@ -542,7 +542,9 @@ def create_exam_remark_test_fixtures(session: Session, courses: list):
         full_name="Remark Test User",
         role=UserRole.STUDENT,
         hashed_password="demo_hash",
-        is_active=True
+        is_active=True,
+        is_foreigner=False,
+        id_card_image_url="/static/images/id_card.png"
     )
     session.add(test_student)
     session.commit()
