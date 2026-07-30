@@ -88,6 +88,8 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: str = Field(..., max_length=150)
     role: UserRole = UserRole.STUDENT
+    is_foreigner: bool = False
+    id_card_image_url: Optional[str] = None
 
 
 class UserCreate(UserBase):

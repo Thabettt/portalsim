@@ -58,19 +58,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.routers import admin, webhooks, grades, enrollments
+from app.routers import admin, webhooks, grades, enrollments, students
 
 # Include routers
 app.include_router(admin.router)
 app.include_router(webhooks.router)
 app.include_router(grades.router)
 app.include_router(enrollments.router)
+app.include_router(students.router)
 
 # Mount static assets directory
 static_dir = os.path.join(os.path.dirname(__file__), "..", "portal-admin-frontend", "dist")
 
 if os.path.isdir(os.path.join(static_dir, "assets")):
     app.mount("/assets", StaticFiles(directory=os.path.join(static_dir, "assets")), name="assets")
+
+# Mount public static files (e.g. images)
+public_static_dir = os.path.join(os.path.dirname(__file__), "static")
+if not os.path.exists(public_static_dir):
+    os.makedirs(public_static_dir, exist_ok=True)
+app.mount("/static", StaticFiles(directory=public_static_dir), name="static")
 
 @app.get("/api-info")
 async def root():

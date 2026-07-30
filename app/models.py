@@ -92,6 +92,8 @@ class User(SQLModel, table=True):
     full_name: str = Field(max_length=150)
     role: UserRole = Field(default=UserRole.STUDENT, sa_column=Column(SQLEnum(UserRole)))
     hashed_password: str = Field(max_length=255)  # Not used in demo, but kept for future
+    is_foreigner: bool = Field(default=False)
+    id_card_image_url: Optional[str] = Field(default=None, max_length=500)
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, sa_column=Column(DateTime, default=datetime.utcnow))
     updated_at: datetime = Field(default_factory=datetime.utcnow, sa_column=Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow))

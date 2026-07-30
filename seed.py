@@ -119,13 +119,16 @@ def create_students(session: Session, year: int = 2024) -> list:
     
     # Create fixed students first
     for i, (name, email) in enumerate(FIXED_STUDENTS):
+        is_foreigner = (email == "lakshyrupani.lr@gmail.com")
         student = User(
             student_id=generate_student_id(year, i + 1),
             email=email,
             full_name=name,
             role=UserRole.STUDENT,
             hashed_password="demo_hash",
-            is_active=True
+            is_active=True,
+            is_foreigner=is_foreigner,
+            id_card_image_url="/static/images/id_card.png"
         )
         session.add(student)
         students.append(student)
@@ -139,7 +142,9 @@ def create_students(session: Session, year: int = 2024) -> list:
             full_name=name,
             role=UserRole.STUDENT,
             hashed_password="demo_hash",
-            is_active=True
+            is_active=True,
+            is_foreigner=False,
+            id_card_image_url="/static/images/id_card.png"
         )
         session.add(student)
         students.append(student)
