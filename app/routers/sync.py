@@ -13,8 +13,8 @@ router = APIRouter(
 )
 
 def verify_api_key(api_key: Optional[str] = Header(None, alias="X-API-Key")):
-    """Verify that the provided API key matches the shared secret or grades_lookup API key concept."""
-    valid_key = settings.shared_secret or "test-grades-key"
+    """Verify that the provided API key matches the shared secret."""
+    valid_key = settings.shared_secret or "dev-secret-change-in-production"
     if api_key != valid_key:
         raise HTTPException(status_code=401, detail="Invalid API Key")
     return api_key
