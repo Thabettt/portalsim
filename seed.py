@@ -32,7 +32,7 @@ STUDENTS = [
     ("Ali", "STU-2024-0002", "alialnaggar.h@gmail.com", False),
     ("Lakshy", "STU-2024-0003", "lakshyrupani.lr@gmail.com", True),
     ("Mohamed", "STU-2024-0004", "giuians2027@gmail.com", False),
-    ("Remark Test User", "STU-9999-0001", "thabetology@gmail.com", False),
+    ("Remark Test User", "STU-9999-0001", "thabetology+testuser@gmail.com", False),
 ]
 
 COURSES = [
@@ -51,11 +51,11 @@ COURSES = [
 INSTRUCTORS = [
     ("John Zaki", "INS-2024-0001", "j.fayez@gmail.com", "Professor"),
     ("Mohamed El-Maadawy", "INS-2024-0002", "mo.elmaadawy1@gmail.com", "TA"),
-    ("Lakshy", "INS-2024-0003", "lakshyrupani.lr@gmail.com", "TA"),
+    ("Lakshy", "INS-2024-0003", "lakshyrupani.lr+ta@gmail.com", "TA"),
 ]
 
 EXAM_OFFICERS = [
-    ("Ali", "ADM-2024-0001", "alialnaggar.h@gmail.com"),
+    ("Ali", "ADM-2024-0001", "alialnaggar.h+admin@gmail.com"),
 ]
 
 INTERNSHIP_COMPANIES = [
