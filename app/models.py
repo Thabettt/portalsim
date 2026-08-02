@@ -9,6 +9,7 @@ class UserRole(str, PyEnum):
     STUDENT = "student"
     ADMIN = "admin"
     INSTRUCTOR = "instructor"
+    EXAM_OFFICER = "exam_officer"
 
 
 class AttendanceStatus(str, PyEnum):
@@ -104,6 +105,18 @@ class User(SQLModel, table=True):
     assessments: List["Assessment"] = Relationship(back_populates="student", sa_relationship_kwargs={"foreign_keys": "Assessment.student_id"})
     internships: List["Internship"] = Relationship(back_populates="student", sa_relationship_kwargs={"foreign_keys": "Internship.student_id"})
     course_enrollments: List["CourseEnrollment"] = Relationship(back_populates="student", sa_relationship_kwargs={"foreign_keys": "CourseEnrollment.student_id"})
+    taught_courses: List["CourseInstructor"] = Relationship(back_populates="instructor")
+
+class CourseInstructor(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    course_id: int = Field(foreign_key="course.id", index=True)
+    instructor_id: int = Field(foreign_key="user.id", index=True)
+    instructor_type: str = Field(default="Professor", max_length=50) # "Professor" or "TA"
+    
+    course: Optional["Course"] = Relationship(back_populates="instructors")
+    instructor: Optional["User"] = Relationship(back_populates="taught_courses")
+    
+    __table_args__ = (UniqueConstraint("course_id", "instructor_id", name="unique_course_instructor"),)
 
 
 class Course(SQLModel, table=True):
@@ -113,11 +126,11 @@ class Course(SQLModel, table=True):
     description: Optional[str] = Field(default=None, max_length=500)
     credits: int = Field(default=3)
     semester: str = Field(max_length=20)  # e.g., "Fall 2024"
-    instructor_id: Optional[int] = Field(default=None, foreign_key="user.id")
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, sa_column=Column(DateTime, default=datetime.utcnow))
 
     # Relationships
+    instructors: List["CourseInstructor"] = Relationship(back_populates="course")
     enrollments: List["CourseEnrollment"] = Relationship(back_populates="course")
     attendances: List["Attendance"] = Relationship(back_populates="course", sa_relationship_kwargs={"foreign_keys": "Attendance.course_id"})
     assessments: List["Assessment"] = Relationship(back_populates="course", sa_relationship_kwargs={"foreign_keys": "Assessment.course_id"})

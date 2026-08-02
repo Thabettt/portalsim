@@ -12,7 +12,7 @@ from app.db import engine, create_db_and_tables
 from app.models import (
     User, Course, CourseEnrollment, Attendance, Payment,
     Assessment, Internship, InternshipProgressReport, WebhookSetting, SystemSetting,
-    WebhookLog, CourseSchedule,
+    WebhookLog, CourseSchedule, CourseInstructor,
     UserRole, AttendanceStatus, AttendanceWarningLevel,
     PaymentStatus, PaymentType, AssessmentType, InternshipStatus,
     CourseEnrollmentStatus
@@ -27,25 +27,12 @@ settings = get_settings()
 
 
 # Demo data constants
-FIXED_STUDENTS = [
-    ("Abdulaziz", "thabetology@gmail.com"),
-    ("Ali", "alialnaggar.h@gmail.com"),
-    ("Lakshy", "lakshyrupani.lr@gmail.com"),
-    ("Mohamed", "giuians2027@gmail.com"),
-]
-
-STUDENT_NAMES = [
-    ("Ahmed Hassan", "ahmed.hassan@student.edu.eg"),
-    ("Fatima Ali", "fatima.ali@student.edu.eg"),
-    ("Mohamed Omar", "mohamed.omar@student.edu.eg"),
-    ("Aisha Mahmoud", "aisha.mahmoud@student.edu.eg"),
-    ("Youssef Ibrahim", "youssef.ibrahim@student.edu.eg"),
-    ("Mariam Adel", "mariam.adel@student.edu.eg"),
-    ("Karim Mostafa", "karim.mostafa@student.edu.eg"),
-    ("Nour El-Din", "nour.eldin@student.edu.eg"),
-    ("Sara Khaled", "sara.khaled@student.edu.eg"),
-    ("Omar Tarek", "omar.tarek@student.edu.eg"),
-    ("Laila Samir", "laila.samir@student.edu.eg"),
+STUDENTS = [
+    ("Abdulaziz", "STU-2024-0001", "thabetology@gmail.com", False),
+    ("Ali", "STU-2024-0002", "alialnaggar.h@gmail.com", False),
+    ("Lakshy", "STU-2024-0003", "lakshyrupani.lr@gmail.com", True),
+    ("Mohamed", "STU-2024-0004", "giuians2027@gmail.com", False),
+    ("Remark Test User", "STU-9999-0001", "thabetology@gmail.com", False),
 ]
 
 COURSES = [
@@ -62,11 +49,13 @@ COURSES = [
 ]
 
 INSTRUCTORS = [
-    ("Dr. Ahmed El-Sayed", "ahmed.elsayed@faculty.edu.eg"),
-    ("Prof. Mona Hassan", "mona.hassan@faculty.edu.eg"),
-    ("Dr. Karim Mahmoud", "karim.mahmoud@faculty.edu.eg"),
-    ("Prof. Aisha Omar", "aisha.omar@faculty.edu.eg"),
-    ("Dr. Youssef Nabil", "youssef.nabil@faculty.edu.eg"),
+    ("John Zaki", "INS-2024-0001", "j.fayez@gmail.com", "Professor"),
+    ("Mohamed El-Maadawy", "INS-2024-0002", "mo.elmaadawy1@gmail.com", "TA"),
+    ("Lakshy", "INS-2024-0003", "lakshyrupani.lr@gmail.com", "TA"),
+]
+
+EXAM_OFFICERS = [
+    ("Ali", "ADM-2024-0001", "alialnaggar.h@gmail.com"),
 ]
 
 INTERNSHIP_COMPANIES = [
@@ -95,9 +84,9 @@ def generate_student_id(year: int, sequence: int) -> str:
 def create_instructors(session: Session) -> list:
     """Create instructor users"""
     instructors = []
-    for i, (name, email) in enumerate(INSTRUCTORS):
+    for (name, ins_id, email, ins_type) in INSTRUCTORS:
         instructor = User(
-            student_id=f"INS-2024-{i+1:03d}",
+            student_id=ins_id,
             email=email,
             full_name=name,
             role=UserRole.INSTRUCTOR,
@@ -105,45 +94,42 @@ def create_instructors(session: Session) -> list:
             is_active=True
         )
         session.add(instructor)
-        instructors.append(instructor)
+        instructors.append((instructor, ins_type))
     session.commit()
-    for inst in instructors:
+    for inst, _ in instructors:
         session.refresh(inst)
     logger.info(f"Created {len(instructors)} instructors")
     return instructors
+
+def create_exam_officers(session: Session):
+    """Create exam officer users"""
+    for (name, admin_id, email) in EXAM_OFFICERS:
+        admin = User(
+            student_id=admin_id,
+            email=email,
+            full_name=name,
+            role=UserRole.EXAM_OFFICER,
+            hashed_password="demo_hash",
+            is_active=True
+        )
+        session.add(admin)
+    session.commit()
+    logger.info(f"Created {len(EXAM_OFFICERS)} exam officers")
 
 
 def create_students(session: Session, year: int = 2024) -> list:
     """Create student users"""
     students = []
     
-    # Create fixed students first
-    for i, (name, email) in enumerate(FIXED_STUDENTS):
-        is_foreigner = (email == "lakshyrupani.lr@gmail.com")
+    for (name, stu_id, email, is_foreigner) in STUDENTS:
         student = User(
-            student_id=generate_student_id(year, i + 1),
+            student_id=stu_id,
             email=email,
             full_name=name,
             role=UserRole.STUDENT,
             hashed_password="demo_hash",
             is_active=True,
             is_foreigner=is_foreigner,
-            id_card_image_url="/static/images/id_card.png"
-        )
-        session.add(student)
-        students.append(student)
-        
-    # Create random students
-    start_idx = len(FIXED_STUDENTS) + 1
-    for i, (name, email) in enumerate(STUDENT_NAMES):
-        student = User(
-            student_id=generate_student_id(year, start_idx + i),
-            email=email,
-            full_name=name,
-            role=UserRole.STUDENT,
-            hashed_password="demo_hash",
-            is_active=True,
-            is_foreigner=False,
             id_card_image_url="/static/images/id_card.png"
         )
         session.add(student)
@@ -160,22 +146,25 @@ def create_courses(session: Session, instructors: list) -> list:
     """Create courses with assigned instructors"""
     courses = []
     for i, (code, name, semester, credits) in enumerate(COURSES):
-        instructor = instructors[i % len(instructors)] if instructors else None
         course = Course(
             code=code,
             name=name,
             description=f"Course description for {name}",
             credits=credits,
             semester=semester,
-            instructor_id=instructor.id if instructor else None,
             is_active=True
         )
         session.add(course)
         courses.append(course)
     session.commit()
+    
     for c in courses:
         session.refresh(c)
-    logger.info(f"Created {len(courses)} courses")
+        for inst, ins_type in instructors:
+            session.add(CourseInstructor(course_id=c.id, instructor_id=inst.id, instructor_type=ins_type))
+            
+    session.commit()
+    logger.info(f"Created {len(courses)} courses and assigned all instructors")
     return courses
 
 
@@ -536,29 +525,23 @@ def create_system_settings(session: Session):
 
 def create_exam_remark_test_fixtures(session: Session, courses: list):
     """Create specific deterministic test cases for exam remark testing."""
-    test_student = User(
-        student_id="STU-9999-0001",
-        email="remark.test@giu-uni.edu.eg",
-        full_name="Remark Test User",
-        role=UserRole.STUDENT,
-        hashed_password="demo_hash",
-        is_active=True,
-        is_foreigner=False,
-        id_card_image_url="/static/images/id_card.png"
-    )
-    session.add(test_student)
-    session.commit()
-    session.refresh(test_student)
+    test_user1 = session.exec(select(User).where(User.student_id == "STU-9999-0001")).first()
+    test_user2 = session.exec(select(User).where(User.student_id == "STU-2024-0001")).first()
 
     test_courses = courses[:5]
     
     for course in test_courses:
-        enrollment = CourseEnrollment(
-            student_id=test_student.id,
-            course_id=course.id,
-            status=CourseEnrollmentStatus.ACTIVE
-        )
-        session.add(enrollment)
+        for t_user in [test_user1, test_user2]:
+            if t_user:
+                # Ensure they aren't already enrolled
+                existing = session.exec(select(CourseEnrollment).where(CourseEnrollment.course_id == course.id, CourseEnrollment.student_id == t_user.id)).first()
+                if not existing:
+                    enrollment = CourseEnrollment(
+                        student_id=t_user.id,
+                        course_id=course.id,
+                        status=CourseEnrollmentStatus.ACTIVE
+                    )
+                    session.add(enrollment)
     session.commit()
 
     base_date = date.today()
@@ -569,22 +552,25 @@ def create_exam_remark_test_fixtures(session: Session, courses: list):
         if len(test_courses) > course_idx:
             cid = test_courses[course_idx].id
             pub_date = today_midnight - timedelta(days=days_ago) if is_pub else None
-            # Midterm
-            fixtures.append(Assessment(
-                course_id=cid, student_id=test_student.id,
-                assessment_type=AssessmentType.MIDTERM,
-                title=f"Midterm ({title_suffix})",
-                max_score=max_score, score=score, weight=1.0,
-                is_published=is_pub, published_at=pub_date, due_date=base_date
-            ))
-            # Final
-            fixtures.append(Assessment(
-                course_id=cid, student_id=test_student.id,
-                assessment_type=AssessmentType.FINAL,
-                title=f"Final Exam ({title_suffix})",
-                max_score=max_score, score=score, weight=1.5,
-                is_published=is_pub, published_at=pub_date, due_date=base_date
-            ))
+            
+            for t_user in [test_user1, test_user2]:
+                if not t_user: continue
+                # Midterm
+                fixtures.append(Assessment(
+                    course_id=cid, student_id=t_user.id,
+                    assessment_type=AssessmentType.MIDTERM,
+                    title=f"Midterm ({title_suffix})",
+                    max_score=max_score, score=score, weight=1.0,
+                    is_published=is_pub, published_at=pub_date, due_date=base_date
+                ))
+                # Final
+                fixtures.append(Assessment(
+                    course_id=cid, student_id=t_user.id,
+                    assessment_type=AssessmentType.FINAL,
+                    title=f"Final Exam ({title_suffix})",
+                    max_score=max_score, score=score, weight=1.5,
+                    is_published=is_pub, published_at=pub_date, due_date=base_date
+                ))
 
     # Case 1: A+ Case (score=96, max=100)
     add_paired_fixtures(0, "A+ Case", 96.0, 100.0, True, 2)
@@ -604,7 +590,7 @@ def create_exam_remark_test_fixtures(session: Session, courses: list):
     for f in fixtures:
         session.add(f)
     session.commit()
-    logger.info("Created exam remark test fixtures for Remark Test User (STU-9999-0001)")
+    logger.info("Created exam remark test fixtures for Remark Test User and Abdulaziz")
 
 
 async def seed_database(session: Session = None):
@@ -628,6 +614,7 @@ async def seed_database(session: Session = None):
     session.exec(delete(Payment))
     session.exec(delete(Attendance))
     session.exec(delete(CourseSchedule))
+    session.exec(delete(CourseInstructor))
     session.exec(delete(CourseEnrollment))
     session.exec(delete(Course))
     session.exec(delete(User))
@@ -636,6 +623,7 @@ async def seed_database(session: Session = None):
     session.commit()
 
     # Create data in dependency order
+    create_exam_officers(session)
     instructors = create_instructors(session)
     students = create_students(session)
     courses = create_courses(session, instructors)
