@@ -10,6 +10,7 @@ import {
   Settings,
   Moon,
   Sun,
+  ShieldAlert,
   X
 } from 'lucide-react';
 import { getHealth } from '../api';
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { label: 'Payments', path: '/payments', icon: CreditCard },
   { label: 'Internships', path: '/internships', icon: Briefcase },
   { label: 'Grades & Deadlines', path: '/grades', icon: BookOpen },
+  { label: 'Warning Status', path: '/warning-status', icon: ShieldAlert },
   { label: 'Webhook Log', path: '/webhooks', icon: History },
   { label: 'Settings', path: '/settings', icon: Settings },
 ];

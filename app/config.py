@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     n8n_attendance_webhook_url: str = ""
     n8n_internship_status_webhook_url: str = ""
     n8n_progress_report_status_webhook_url: str = ""
+    n8n_warning_status_url: str = ""
 
     # Inbound Webhook Settings
     exam_remark_webhook_api_key: str = ""

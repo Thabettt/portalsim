@@ -188,6 +188,11 @@ export async function getWebhookLogStats() {
   return fetchApi("/admin/webhook-logs/stats");
 }
 
+// ==== N8N WEBHOOKS ====
+export async function getStudentWarningStatus(studentId) {
+  return fetchApi(`/admin/students/warning-status?student_id=${encodeURIComponent(studentId)}`);
+}
+
 // ==== SETTINGS ====
 export async function getSettings() {
   return fetchApi("/admin/settings");
