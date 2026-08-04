@@ -65,7 +65,8 @@ def create_charge(
         status=PaymentStatus.PENDING,
         description=request.reason,
         external_reference_id=request.external_reference_id,
-        source=request.source
+        source=request.source,
+        currency=request.currency,
     )
     session.add(new_payment)
     

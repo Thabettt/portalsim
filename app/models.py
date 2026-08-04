@@ -192,6 +192,7 @@ class Payment(SQLModel, table=True):
     invoice_number: Optional[str] = Field(default=None, max_length=50, unique=True)
     external_reference_id: Optional[str] = Field(default=None, unique=True, index=True)
     source: str = Field(default="exam_remark", max_length=50)
+    currency: Optional[str] = Field(default=None, max_length=10)  # e.g. EGP, EUR
     created_at: datetime = Field(default_factory=datetime.utcnow, sa_column=Column(DateTime, default=datetime.utcnow))
     updated_at: datetime = Field(default_factory=datetime.utcnow, sa_column=Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow))
 

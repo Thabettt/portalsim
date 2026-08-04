@@ -515,6 +515,31 @@ async def get_student_summary(
     payments = get_student_payment_summary(session, student_id)
     grades = get_student_grades_summary(session, student_id)
 
+    # Itemised payment records (all statuses) so the UI can show per-charge details
+    all_payments = session.exec(
+        select(Payment)
+        .where(Payment.student_id == student_id)
+        .order_by(Payment.created_at.desc())
+    ).all()
+
+    payments_detail = [
+        {
+            "id": p.id,
+            "payment_type": p.payment_type.value if hasattr(p.payment_type, "value") else p.payment_type,
+            "amount": p.amount,
+            "currency": p.currency or "EGP",
+            "due_date": str(p.due_date) if p.due_date else None,
+            "status": p.status.value if hasattr(p.status, "value") else p.status,
+            "paid_amount": p.paid_amount,
+            "paid_at": p.paid_at.isoformat() if p.paid_at else None,
+            "description": p.description,
+            "external_reference_id": p.external_reference_id,
+            "source": p.source,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        }
+        for p in all_payments
+    ]
+
     return {
         "student": {
             "id": student.id,
@@ -525,6 +550,7 @@ async def get_student_summary(
         },
         "attendance": attendance,
         "payments": payments,
+        "payments_detail": payments_detail,
         "grades": grades
     }
 
