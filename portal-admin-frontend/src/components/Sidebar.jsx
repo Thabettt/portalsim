@@ -11,7 +11,8 @@ import {
   Moon,
   Sun,
   X,
-  GraduationCap
+  GraduationCap,
+  ShieldAlert
 } from 'lucide-react';
 import { getHealth } from '../api';
 import { useTheme } from '../hooks/useTheme';
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { label: 'Internship Management', path: '/internships', icon: Briefcase },
   { label: 'Student Internship', path: '/student-internship', icon: GraduationCap },
   { label: 'Grades & Deadlines', path: '/grades', icon: BookOpen },
+  { label: 'Warning Status', path: '/warning-status', icon: ShieldAlert },
   { label: 'Webhook Log', path: '/webhooks', icon: History },
   { label: 'Settings', path: '/settings', icon: Settings },
 ];

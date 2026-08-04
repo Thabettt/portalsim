@@ -764,3 +764,23 @@ async def finalize_attendance_day(session: Session = Depends(get_session)):
         raise HTTPException(503, str(exc)) from exc
     except AttendanceFinalizationError as exc:
         raise HTTPException(502, str(exc)) from exc
+
+
+@router.get("/students/warning-status")
+async def get_student_warning_status(student_id: str = Query(..., description="Student ID to look up")):
+    """Proxy a student warning status lookup to the configured n8n webhook."""
+    import httpx
+    from app.config import get_settings
+    settings = get_settings()
+    url = settings.n8n_warning_status_url.strip()
+    if not url:
+        raise HTTPException(503, "Warning status webhook is not configured (N8N_WARNING_STATUS_URL).")
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(url, params={"student_id": student_id})
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(exc.response.status_code, f"n8n returned an error: {exc.response.text}") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(502, f"Could not reach warning status service: {exc}") from exc
