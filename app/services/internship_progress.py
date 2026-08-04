@@ -201,6 +201,10 @@ async def _post_json(url: str, payload: dict) -> None:
         await client.post(url, json=payload)
 
 
+async def trigger_progress_report_accept_automation(session: Session, report: InternshipProgressReport, internship: Internship, student: User) -> None:
+    pass
+
+
 async def trigger_progress_report_reject_automation(session: Session, report: InternshipProgressReport, internship: Internship, student: User) -> None:
     payload = {
         "new_status": "rejected",
