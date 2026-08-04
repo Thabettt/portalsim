@@ -300,6 +300,25 @@ async def decide_internship(
     internship, webhook_log = result
     if webhook_log:
         await deliver_webhook(session, webhook_log)
+
+    if request.status == InternshipStatus.REJECTED:
+        student = session.get(User, internship.student_id)
+        if student:
+            webhook_url = settings.n8n_internship_rejected_webhook_url.strip()
+            payload = {
+                "new_status": "rejected",
+                "student_email": student.email,
+                "internship_title": internship.position,
+            }
+            logger.info(f"[Internship Rejection Notification] Sending payload to {webhook_url}: {payload}")
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    res = await client.post(webhook_url, json=payload)
+                    logger.info(f"[Internship Rejection Notification] Response [{res.status_code}]: {res.text}")
+            except Exception as exc:
+                logger.error(f"[Internship Rejection Notification] Failed to send webhook to {webhook_url}: {exc}")
+
     return internship
 
 
@@ -416,6 +435,15 @@ async def decide_progress_report(
         raise HTTPException(404, "Progress report not found")
     report, webhook_log = result
     await deliver_webhook(session, webhook_log)
+
+    if request.status == ProgressReportStatus.REJECTED:
+        report_obj = session.get(InternshipProgressReport, report_id)
+        if report_obj:
+            internship = session.get(Internship, report_obj.internship_id)
+            student = session.get(User, internship.student_id) if internship else None
+            if report_obj and internship and student:
+                await trigger_progress_report_reject_automation(session, report_obj, internship, student)
+
     return report
 
 

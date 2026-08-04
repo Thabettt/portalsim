@@ -310,11 +310,16 @@ async def update_internship_revision_review(
         if webhook_url:
             payload = {
                 "new_status": "rejected",
-                "internship_title": internship.position,
                 "student_email": student_email,
+                "internship_title": internship.position,
             }
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                await client.post(webhook_url, json=payload)
+            logger.info(f"[Internship Rejection Notification] Sending payload to {webhook_url}: {payload}")
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    res = await client.post(webhook_url, json=payload)
+                    logger.info(f"[Internship Rejection Notification] Response [{res.status_code}]: {res.text}")
+            except Exception as exc:
+                logger.error(f"[Internship Rejection Notification] Failed to send webhook to {webhook_url}: {exc}")
 
     return internship
 
@@ -346,12 +351,17 @@ async def update_internship_final_status(
         if student and webhook_url:
             payload = {
                 "academic_status": "fulfilled",
-                "career_center_status": internship.career_center_final_status or "waiting",
+                "career_center_status": (internship.career_center_final_status or "waiting").lower(),
                 "student_email": student.email,
                 "internship_title": internship.position,
             }
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                await client.post(webhook_url, json=payload)
+            logger.info(f"[Academic Fulfillment Notification] Sending payload to {webhook_url}: {payload}")
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    res = await client.post(webhook_url, json=payload)
+                    logger.info(f"[Academic Fulfillment Notification] Response [{res.status_code}]: {res.text}")
+            except Exception as exc:
+                logger.error(f"[Academic Fulfillment Notification] Failed to send webhook to {webhook_url}: {exc}")
 
     return internship
 

@@ -194,11 +194,17 @@ def list_internship_progress_reports(session: Session, internship_id: int) -> li
     return [_serialize_report(report, internship, student) for report in rows]
 
 
-async def _post_json(url: str, payload: dict) -> None:
+async def _post_json(url: str, payload: dict, description: str = "n8n Webhook") -> None:
     if not url:
+        logger.warning(f"[{description}] Webhook URL is empty, skipping.")
         return
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        await client.post(url, json=payload)
+    logger.info(f"[{description}] Sending payload to {url}: {payload}")
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            res = await client.post(url, json=payload)
+            logger.info(f"[{description}] Response [{res.status_code}]: {res.text}")
+    except Exception as exc:
+        logger.error(f"[{description}] Failed to post webhook to {url}: {exc}")
 
 
 async def trigger_progress_report_accept_automation(session: Session, report: InternshipProgressReport, internship: Internship, student: User) -> None:
@@ -211,21 +217,17 @@ async def trigger_progress_report_reject_automation(session: Session, report: In
         "progress_report_number": str(report.report_number),
         "student_email": student.email,
     }
-    await _post_json(settings.n8n_progress_report_reject_webhook_url.strip(), payload)
+    await _post_json(settings.n8n_progress_report_reject_webhook_url.strip(), payload, "Progress Report Rejection Notification")
 
 
 async def trigger_progress_report_submit_automation(report_dict: dict) -> None:
     payload = {
-        "student_id": report_dict.get("student_string_id", ""),
-        "studentId": report_dict.get("student_string_id", ""),
-        "student_name": report_dict.get("student_name", ""),
-        "studentName": report_dict.get("student_name", ""),
-        "academic_supervisor_email": report_dict.get("supervisor_email", ""),
-        "academicSupervisorEmail": report_dict.get("supervisor_email", ""),
-        "progress_report_no": str(report_dict.get("report_number", "")),
+        "studentId": str(report_dict.get("student_string_id", "") or report_dict.get("student_id", "")),
+        "studentName": str(report_dict.get("student_name", "")),
+        "academicSupervisorEmail": str(report_dict.get("academic_supervisor_email", "") or report_dict.get("supervisor_email", "") or "j.fayez@gmail.com"),
         "progressReportNo": str(report_dict.get("report_number", "")),
     }
-    await _post_json(settings.n8n_progress_reports_aggregated_report_webhook_url.strip(), payload)
+    await _post_json(settings.n8n_progress_reports_aggregated_report_webhook_url.strip(), payload, "Aggregated Progress Report Notification")
 
 
 def update_progress_report_status(
