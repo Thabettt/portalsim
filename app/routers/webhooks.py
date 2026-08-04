@@ -11,7 +11,8 @@ router = APIRouter(prefix="/api/webhooks/charges", tags=["webhooks"])
 
 def verify_api_key(x_api_key: str = Header(default=None)):
     settings = get_settings()
-    if not x_api_key or not settings.exam_remark_webhook_api_key or x_api_key != settings.exam_remark_webhook_api_key:
+    valid_keys = [k for k in [settings.exam_remark_webhook_api_key, settings.grades_lookup_api_key] if k]
+    if not x_api_key or (valid_keys and x_api_key not in valid_keys):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API Key"
@@ -45,15 +46,22 @@ def create_charge(
         response.status_code = status.HTTP_200_OK
         return existing_payment
 
-    # Validate student exists
+    # Validate student exists by student_id, email, or integer ID
     student = session.exec(
-        select(User).where(User.student_id == request.student_id)
+        select(User).where(
+            (User.student_id == request.student_id) | (User.email == request.student_id)
+        )
     ).first()
+
+    if not student and request.student_id.isdigit():
+        student = session.exec(
+            select(User).where(User.id == int(request.student_id))
+        ).first()
 
     if not student:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student not found"
+            detail=f"Student '{request.student_id}' not found"
         )
 
     # Create the payment record
@@ -65,7 +73,8 @@ def create_charge(
         status=PaymentStatus.PENDING,
         description=request.reason,
         external_reference_id=request.external_reference_id,
-        source=request.source
+        source=request.source,
+        currency=request.currency,
     )
     session.add(new_payment)
     
