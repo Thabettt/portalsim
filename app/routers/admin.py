@@ -37,7 +37,9 @@ from app.services.webhook_sender import deliver_webhook, get_webhook_logs
 from app.services.n8n_attendance import (
     AttendanceFinalizationError,
     AttendanceFinalizationNotConfigured,
-    send_attendance_snapshot,
+    get_finalization_progress,
+    resend_failed_chunks,
+    start_attendance_finalization,
 )
 from app.services.internship_progress import (
     create_progress_report,
@@ -653,15 +655,39 @@ async def list_pending_internships(session: Session = Depends(get_session)):
     return result
 
 
-@router.post("/attendance/finalize-day")
+@router.post("/attendance/finalize-day", status_code=202)
 async def finalize_attendance_day(session: Session = Depends(get_session)):
-    """Send the complete saved attendance-warning snapshot to n8n."""
+    """Start a chunked send of the saved attendance-warning snapshot to n8n.
+
+    Returns immediately once the background sender is kicked off; poll
+    /admin/attendance/finalize-day/{finalize_id} for chunk progress.
+    """
     try:
-        return await send_attendance_snapshot(session)
+        return await start_attendance_finalization(session)
     except AttendanceFinalizationNotConfigured as exc:
         raise HTTPException(503, str(exc)) from exc
     except AttendanceFinalizationError as exc:
         raise HTTPException(502, str(exc)) from exc
+
+
+@router.get("/attendance/finalize-day/{finalize_id}")
+async def get_attendance_finalize_progress(finalize_id: str):
+    """Per-chunk progress for a finalize run (e.g. "32 / 50 chunks sent")."""
+    progress = get_finalization_progress(finalize_id)
+    if progress is None:
+        raise HTTPException(404, f"No finalize run found for id {finalize_id}.")
+    return progress
+
+
+@router.post("/attendance/finalize-day/{finalize_id}/resend-failed", status_code=202)
+async def resend_failed_attendance_chunks(finalize_id: str):
+    """Resend only the chunks that failed after retries."""
+    try:
+        return await resend_failed_chunks(finalize_id)
+    except AttendanceFinalizationNotConfigured as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except AttendanceFinalizationError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @router.get("/students/warning-status")

@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarCheck2, CheckCircle2, ChevronDown, RotateCcw, Search, UserRound, XCircle } from 'lucide-react';
-import { finalizeAttendanceDay, getStudents, getStudentAttendanceWarnings, updateStudentAttendanceWarnings } from '../api';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, CalendarCheck2, CheckCircle2, ChevronDown, Loader2, RefreshCw, RotateCcw, Search, UserRound, XCircle } from 'lucide-react';
+import { finalizeAttendanceDay, getFinalizeProgress, getStudents, getStudentAttendanceWarnings, resendFailedChunks, updateStudentAttendanceWarnings } from '../api';
 import { useToast } from '../hooks/useToast';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
@@ -44,8 +44,10 @@ export default function AttendanceWarnings() {
   const [saving, setSaving] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeDialog, setFinalizeDialog] = useState(null);
-  const [finalizeResult, setFinalizeResult] = useState(null);
+  const [finalizeProgress, setFinalizeProgress] = useState(null);
   const [finalizeError, setFinalizeError] = useState('');
+  const [resending, setResending] = useState(false);
+  const pollRef = useRef(null);
 
   useEffect(() => {
     getStudents(1, 200)
@@ -109,10 +111,37 @@ export default function AttendanceWarnings() {
   };
 
   const openFinalizeDialog = () => {
-    setFinalizeResult(null);
     setFinalizeError('');
     setFinalizeDialog(pendingChanges.length > 0 ? 'unsaved' : 'confirm');
   };
+
+  // Poll chunk progress until the background sender settles.
+  const startPolling = finalizeId => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const progress = await getFinalizeProgress(finalizeId);
+        setFinalizeProgress(progress);
+        if (progress.status !== 'running') {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          if (progress.status === 'completed') {
+            addToast(`All ${progress.chunk_count} chunks accepted by the workflow`);
+          } else {
+            addToast(`${progress.chunks_failed} chunk(s) failed after retries`, 'error');
+          }
+        }
+      } catch (err) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+        addToast(err.message || 'Lost track of finalization progress', 'error');
+      }
+    }, 1500);
+  };
+
+  useEffect(() => () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+  }, []);
 
   const runFinalization = async (saveFirst = false) => {
     setFinalizing(true);
@@ -121,15 +150,34 @@ export default function AttendanceWarnings() {
       if (saveFirst && pendingChanges.length > 0) {
         await persistPendingChanges();
       }
-      const result = await finalizeAttendanceDay();
-      setFinalizeResult(result);
-      setFinalizeDialog('success');
+      // Kick off sending in the background: the request returns as soon as the
+      // chunk sender starts, so the UI is never blocked on all chunks landing.
+      const progress = await finalizeAttendanceDay();
+      setFinalizeProgress(progress);
+      setFinalizeDialog(null);
+      addToast(`Finalization started \u2014 sending ${progress.chunk_count} chunks`);
+      startPolling(progress.finalize_id);
     } catch (err) {
       console.error('Attendance finalization failed:', err);
       setFinalizeError(err.message || 'Attendance data was not sent to the notification workflow. Please try again.');
       setFinalizeDialog('error');
     } finally {
       setFinalizing(false);
+    }
+  };
+
+  const retryFailedChunks = async () => {
+    if (!finalizeProgress?.finalize_id) return;
+    setResending(true);
+    try {
+      const progress = await resendFailedChunks(finalizeProgress.finalize_id);
+      setFinalizeProgress(progress);
+      startPolling(progress.finalize_id);
+      addToast(`Resending ${progress.chunks_pending} failed chunk(s)`);
+    } catch (err) {
+      addToast(err.message || 'Could not resend failed chunks', 'error');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -140,11 +188,63 @@ export default function AttendanceWarnings() {
           <h2 className="text-xl font-semibold tracking-tight text-foreground">Attendance Warning Review</h2>
           <p className="mt-1 text-sm text-muted-foreground">Review and correct active attendance warnings by student.</p>
         </div>
-        <Button onClick={openFinalizeDialog} className="gap-2 self-start">
+        <Button onClick={openFinalizeDialog} className="gap-2 self-start" disabled={finalizeProgress?.status === 'running'}>
           <CalendarCheck2 className="h-4 w-4" />
           Finalize End of Day
         </Button>
       </div>
+
+      {finalizeProgress && (
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-4 border-b bg-muted/20 pb-4">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                {finalizeProgress.status === 'running' ? (
+                  <><Loader2 className="h-4 w-4 animate-spin text-primary" /> Sending Attendance Chunks</>
+                ) : finalizeProgress.status === 'completed' ? (
+                  <><CheckCircle2 className="h-4 w-4 text-emerald-500" /> All Chunks Sent</>
+                ) : (
+                  <><AlertTriangle className="h-4 w-4 text-amber-500" /> Some Chunks Failed</>
+                )}
+              </CardTitle>
+              <p className="mt-1 font-mono text-xs text-muted-foreground">{finalizeProgress.finalize_id}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant={finalizeProgress.chunks_failed > 0 ? 'danger' : finalizeProgress.status === 'completed' ? 'success' : 'warning'}>
+                {finalizeProgress.chunks_sent} / {finalizeProgress.chunk_count} chunks sent
+              </Badge>
+              <Button variant="ghost" size="icon" onClick={() => setFinalizeProgress(null)} disabled={finalizeProgress.status === 'running'} aria-label="Dismiss finalization progress">
+                <XCircle className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-4">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className={`h-full transition-all duration-500 ${finalizeProgress.chunks_failed > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                style={{ width: `${finalizeProgress.chunk_count ? (finalizeProgress.chunks_sent / finalizeProgress.chunk_count) * 100 : 0}%` }}
+              />
+            </div>
+            <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+              <div><dt className="text-muted-foreground">Students</dt><dd className="mt-1 font-semibold">{finalizeProgress.students_processed}</dd></div>
+              <div><dt className="text-muted-foreground">Chunk size</dt><dd className="mt-1 font-semibold">{finalizeProgress.chunk_size}</dd></div>
+              <div><dt className="text-muted-foreground">Pending</dt><dd className="mt-1 font-semibold">{finalizeProgress.chunks_pending}</dd></div>
+              <div><dt className="text-muted-foreground">Failed</dt><dd className="mt-1 font-semibold">{finalizeProgress.chunks_failed}</dd></div>
+            </dl>
+            <p className="text-sm text-muted-foreground">{finalizeProgress.message}</p>
+            {finalizeProgress.chunks_failed > 0 && (
+              <div className="flex flex-col gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-amber-800 dark:text-amber-300">
+                  Failed chunk{finalizeProgress.failed_chunks.length > 1 ? 's' : ''}: {finalizeProgress.failed_chunks.join(', ')}
+                </p>
+                <Button variant="outline" onClick={retryFailedChunks} isLoading={resending} disabled={finalizeProgress.status === 'running'} className="gap-2 self-start sm:self-auto">
+                  <RefreshCw className="h-4 w-4" /> Resend Failed Chunks
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="overflow-visible">
         <CardHeader className="pb-4">
@@ -278,24 +378,7 @@ export default function AttendanceWarnings() {
       {finalizeDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="presentation">
           <div className="w-full max-w-lg rounded-lg border bg-card p-6 text-card-foreground shadow-xl" role="dialog" aria-modal="true" aria-labelledby="finalize-dialog-title">
-            {finalizeDialog === 'success' ? (
-              <div className="space-y-5">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="mt-0.5 h-6 w-6 text-emerald-500" />
-                  <div>
-                    <h3 id="finalize-dialog-title" className="text-lg font-semibold">End-of-Day Processing Complete</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">The attendance snapshot was sent to the notification workflow.</p>
-                  </div>
-                </div>
-                <dl className="grid grid-cols-1 gap-3 rounded-md bg-muted/50 p-4 text-sm sm:grid-cols-2">
-                  <div><dt className="text-muted-foreground">Batch ID</dt><dd className="mt-1 break-all font-mono text-xs">{finalizeResult?.batch_id}</dd></div>
-                  <div><dt className="text-muted-foreground">Finalized at</dt><dd className="mt-1">{formatUpdated(finalizeResult?.finalized_at)}</dd></div>
-                  <div><dt className="text-muted-foreground">Students processed</dt><dd className="mt-1 font-semibold">{finalizeResult?.students_processed}</dd></div>
-                  <div><dt className="text-muted-foreground">Course records sent</dt><dd className="mt-1 font-semibold">{finalizeResult?.course_records_sent}</dd></div>
-                </dl>
-                <div className="flex justify-end"><Button onClick={() => setFinalizeDialog(null)}>Done</Button></div>
-              </div>
-            ) : finalizeDialog === 'error' ? (
+            {finalizeDialog === 'error' ? (
               <div className="space-y-5">
                 <div className="flex items-start gap-3">
                   <XCircle className="mt-0.5 h-6 w-6 text-red-500" />
@@ -317,7 +400,7 @@ export default function AttendanceWarnings() {
                   <p className="mt-2 text-sm text-muted-foreground">
                     {finalizeDialog === 'unsaved'
                       ? 'You have unsaved attendance changes. Save and finalize them?'
-                      : 'This will send the complete saved attendance-warning snapshot to the notification workflow.'}
+                      : 'This will send the complete saved attendance-warning snapshot to the notification workflow in chunks. Sending runs in the background and you can keep working.'}
                   </p>
                 </div>
                 <div className="flex justify-end gap-2">

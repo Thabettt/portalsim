@@ -106,6 +106,16 @@ export async function finalizeAttendanceDay() {
   return fetchApi("/admin/attendance/finalize-day", { method: "POST" });
 }
 
+export async function getFinalizeProgress(finalizeId) {
+  return fetchApi(`/admin/attendance/finalize-day/${encodeURIComponent(finalizeId)}`);
+}
+
+export async function resendFailedChunks(finalizeId) {
+  return fetchApi(`/admin/attendance/finalize-day/${encodeURIComponent(finalizeId)}/resend-failed`, {
+    method: "POST",
+  });
+}
+
 // ==== INTERNSHIPS ====
 export async function getPendingInternships(page = 1, pageSize = 50) {
   return fetchApi(`/admin/internships/pending?page=${page}&page_size=${pageSize}`);
@@ -203,4 +213,31 @@ export async function updateSettings(payload) {
     method: "PUT",
     body: JSON.stringify(payload),
   });
+}
+
+// ==== DEV-ONLY: ATTENDANCE WARNING SIMULATOR ====
+// Backed by app/routers/dev_simulator.py, which 404s unless DEBUG is on.
+export async function getSimStatus() {
+  return fetchApi("/dev/attendance-sim/status");
+}
+
+export async function simulateNextDay({ chunkSize = 200, previewChunk = 1 } = {}) {
+  const params = new URLSearchParams({
+    chunk_size: String(chunkSize),
+    preview_chunk: String(previewChunk),
+  });
+  return fetchApi(`/dev/attendance-sim/next-day?${params}`, { method: "POST" });
+}
+
+export async function seedSimulator({ students = 3000, force = false } = {}) {
+  const params = new URLSearchParams({ students: String(students), force: String(force) });
+  return fetchApi(`/dev/attendance-sim/seed?${params}`, { method: "POST" });
+}
+
+export async function resetSimulator() {
+  return fetchApi("/dev/attendance-sim/reset", { method: "POST" });
+}
+
+export async function getSimStudent(studentId) {
+  return fetchApi(`/dev/attendance-sim/student/${encodeURIComponent(studentId)}`);
 }

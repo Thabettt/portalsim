@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     webhook_max_retries: int = 3
     webhook_retry_delays: str = "5,30,120"
 
+    # Attendance end-of-day chunked submission
+    attendance_chunk_size: int = 200
+    attendance_chunk_max_concurrency: int = 5
+    attendance_chunk_max_retries: int = 3
+    attendance_chunk_retry_delays: str = "2,4,8"
+    attendance_chunk_timeout_seconds: float = 30.0
+
     # App settings
     app_name: str = "University Portal Simulator"
     debug: bool = True
@@ -34,6 +41,16 @@ class Settings(BaseSettings):
     @property
     def retry_delays(self) -> list[int]:
         return [int(x.strip()) for x in self.webhook_retry_delays.split(",")]
+
+    @property
+    def attendance_retry_delays(self) -> list[int]:
+        """Exponential backoff delays (seconds) between attendance chunk retries."""
+        delays = [
+            int(x.strip())
+            for x in self.attendance_chunk_retry_delays.split(",")
+            if x.strip()
+        ]
+        return delays or [2, 4, 8]
 
 
 @lru_cache
