@@ -18,6 +18,7 @@ from app.schemas import (
     WebhookSettingCreate, WebhookSettingRead, WebhookSettingUpdate,
     WebhookLogRead, SystemStateResponse, SeedResponse,
     AttendanceMarkRequest, AttendanceBatchMarkRequest, AttendanceWarningBatchUpdateRequest, InternshipDecisionRequest,
+    InternshipRevisionDecisionRequest, InternshipFinalStatusRequest,
     ProgressReportCreateRequest, ProgressReportDecisionRequest,
     AssessmentPublishRequest, PaginatedResponse
 )
@@ -31,7 +32,7 @@ from app.services.payments import (
 )
 from app.services.grades_internships import (
     publish_assessment_grade, simulate_deadline_check,
-    update_internship_status, get_student_grades_summary
+    update_internship_status, update_internship_revision_review, update_internship_final_status, get_student_grades_summary
 )
 from app.services.webhook_sender import deliver_webhook, get_webhook_logs
 from app.services.n8n_attendance import (
@@ -39,10 +40,16 @@ from app.services.n8n_attendance import (
     AttendanceFinalizationNotConfigured,
     send_attendance_snapshot,
 )
+from app.services.internship_admin import build_internship_admin_record, sort_internship_records
 from app.services.internship_progress import (
     create_progress_report,
     list_approved_internships,
+    list_all_internships,
+    list_internship_progress_reports,
     list_pending_progress_reports,
+    trigger_progress_report_accept_automation,
+    trigger_progress_report_reject_automation,
+    trigger_progress_report_submit_automation,
     update_progress_report_status,
 )
 # from app.config import get_settings as get_app_config  # Not used directly
@@ -296,10 +303,61 @@ async def decide_internship(
     return internship
 
 
+@router.post("/internships/revision-review/{review_type}")
+async def decide_internship_revision_review(
+    review_type: str,
+    request: InternshipRevisionDecisionRequest,
+    session: Session = Depends(get_session),
+):
+    """Update internship revision review status for the career center or supervisor."""
+    try:
+        internship = await update_internship_revision_review(
+            session=session,
+            student_email=request.student_email,
+            internship_title=request.internship_title,
+            review_type=review_type,
+            new_status=request.new_status,
+            reason=request.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    if not internship:
+        raise HTTPException(404, "Internship not found")
+
+    status_field = "career_center_review_status" if review_type == "career_center" else "supervisor_review_status"
+    return {
+        "status": getattr(internship, status_field),
+        "internship": internship,
+    }
+
+
+@router.post("/internships/{internship_id}/final-status", response_model=InternshipRead)
+async def fulfill_internship_final_status(
+    internship_id: int,
+    request: InternshipFinalStatusRequest,
+    session: Session = Depends(get_session),
+):
+    """Mark an internship as fulfilled from the academic or career center perspective."""
+    try:
+        internship = await update_internship_final_status(session, internship_id, request.review_type)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not internship:
+        raise HTTPException(404, "Internship not found")
+    return internship
+
+
 @router.get("/internships/approved")
 async def get_approved_internships(session: Session = Depends(get_session)):
     """List internships that can submit bi-weekly progress reports."""
     return list_approved_internships(session)
+
+
+@router.get("/internships/all")
+async def get_all_internships(session: Session = Depends(get_session)):
+    """List all internships for all students regardless of status."""
+    return list_all_internships(session)
 
 
 @router.post("/internships/{internship_id}/progress-reports")
@@ -308,14 +366,27 @@ async def submit_progress_report(
     request: ProgressReportCreateRequest,
     session: Session = Depends(get_session),
 ):
-    """Create the next numbered bi-weekly report for an approved internship."""
+    logger.info(f"Incoming progress report submit request: {internship_id} - {request}")
+    """Create a numbered bi-weekly report for an approved internship."""
     try:
-        report = create_progress_report(session, internship_id, request.summary)
+        report = create_progress_report(session, internship_id, request.report_number, request.summary)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     if not report:
         raise HTTPException(404, "Internship not found")
+        
+    await trigger_progress_report_submit_automation(report)
+    
     return report
+
+
+@router.get("/internships/{internship_id}/progress-reports")
+async def get_internship_progress_reports(
+    internship_id: int,
+    session: Session = Depends(get_session),
+):
+    """List all submitted progress reports for an internship."""
+    return list_internship_progress_reports(session, internship_id)
 
 
 @router.get("/internship-progress-reports/pending")
@@ -330,6 +401,7 @@ async def decide_progress_report(
     request: ProgressReportDecisionRequest,
     session: Session = Depends(get_session),
 ):
+    logger.info(f"Incoming progress report decision request: {report_id} - {request}")
     """Approve or reject a bi-weekly report and queue its webhook event."""
     try:
         result = update_progress_report_status(
@@ -645,12 +717,16 @@ async def list_pending_internships(session: Session = Depends(get_session)):
     
     result = []
     for internship, user in internships:
-        i_dict = internship.model_dump()
-        i_dict["student_name"] = user.full_name
-        i_dict["student_string_id"] = user.student_id
-        result.append(i_dict)
-        
-    return result
+        report_count = session.exec(
+            select(func.count(InternshipProgressReport.id))
+            .where(InternshipProgressReport.internship_id == internship.id)
+        ).one()
+        record = build_internship_admin_record(internship, user, report_count=report_count)
+        record["proof_of_acceptance_uploaded_at"] = internship.proof_of_acceptance_uploaded_at.isoformat() if internship.proof_of_acceptance_uploaded_at else None
+        record["evaluation_form_uploaded_at"] = internship.evaluation_form_uploaded_at.isoformat() if internship.evaluation_form_uploaded_at else None
+        result.append(record)
+
+    return sort_internship_records(result)
 
 
 @router.post("/attendance/finalize-day")

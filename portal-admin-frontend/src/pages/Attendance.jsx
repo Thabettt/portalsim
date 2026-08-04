@@ -189,7 +189,7 @@ export default function Attendance() {
         
         {/* Left column: Daily Roster for Marking */}
         <Card className="flex flex-col h-[600px] overflow-hidden border-primary/20 shadow-md">
-          <CardHeader className="border-b py-4 bg-muted/20 flex flex-row items-center justify-between">
+          <CardHeader className="border-b py-4 bg-muted dark:bg-muted/20 flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-sm">Daily Roster</CardTitle>
               <p className="text-xs text-muted-foreground mt-1">
@@ -204,7 +204,7 @@ export default function Attendance() {
               </div>
             ) : dailyRoster.length > 0 ? (
               <table className="min-w-full divide-y divide-border">
-                <thead className="bg-muted/50 sticky top-0 z-10 backdrop-blur-sm">
+                <thead className="bg-muted dark:bg-muted/50 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Student</th>
                     <th className="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -224,7 +224,7 @@ export default function Attendance() {
                   {dailyRoster.map((student) => (
                     <tr 
                       key={student.student_id} 
-                      className={`hover:bg-muted/50 transition-colors cursor-pointer ${attendanceMarks[student.student_id] ? 'bg-primary/5' : ''}`}
+                      className={`hover:bg-muted dark:bg-muted/50 transition-colors cursor-pointer ${attendanceMarks[student.student_id] ? 'bg-primary/5' : ''}`}
                       onClick={() => handleCheckboxChange(student.student_id)}
                     >
                       <td className="px-6 py-3 whitespace-nowrap">
@@ -275,7 +275,7 @@ export default function Attendance() {
 
         {/* Right column: Overall Course Roster Summary */}
         <Card className="flex flex-col h-[600px] overflow-hidden">
-          <CardHeader className="border-b py-4 bg-muted/20">
+          <CardHeader className="border-b py-4 bg-muted dark:bg-muted/20">
             <CardTitle className="text-sm">
               {courseAttendance ? `Roster Summary: ${courseAttendance.course.code}` : 'Course Summary'}
             </CardTitle>
@@ -290,7 +290,7 @@ export default function Attendance() {
               </div>
             ) : courseAttendance && Object.keys(courseAttendance.students).length > 0 ? (
               <table className="min-w-full divide-y divide-border">
-                <thead className="bg-muted/50 sticky top-0 z-10 backdrop-blur-sm">
+                <thead className="bg-muted dark:bg-muted/50 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Student</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">Present</th>
@@ -300,7 +300,7 @@ export default function Attendance() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {Object.entries(courseAttendance.students).map(([studentId, data]) => (
-                    <tr key={studentId} className="hover:bg-muted/50 transition-colors">
+                    <tr key={studentId} className="hover:bg-muted dark:bg-muted/50 transition-colors">
                       <td className="px-6 py-3 whitespace-nowrap">
                         <div className="text-sm font-medium text-foreground">{data.student_name}</div>
                         <div className="text-xs text-muted-foreground">{studentId}</div>

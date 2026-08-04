@@ -44,7 +44,7 @@ export default function StudentDetail() {
             {student.name}
           </h1>
           <p className="text-muted-foreground mt-1 flex items-center gap-2">
-            <User className="w-4 h-4" /> {student.student_id} | {student.email}
+            <User className="w-4 h-4" /> {student.student_id} | {student.email?.replace(/\+[^@]+/, '')}
           </p>
         </div>
       </div>
@@ -123,13 +123,13 @@ export default function StudentDetail() {
 
       {/* Detailed Lists */}
       <div className="bg-card rounded-lg border shadow-sm mt-8 overflow-hidden">
-        <div className="px-6 py-4 border-b bg-muted/50">
+        <div className="px-6 py-4 border-b bg-muted dark:bg-muted/50">
           <h2 className="text-lg font-semibold text-card-foreground">Assessments Details</h2>
         </div>
         <div className="p-0 overflow-x-auto">
           {grades?.assessments?.length > 0 ? (
             <table className="min-w-full divide-y divide-border">
-              <thead className="bg-muted/50">
+              <thead className="bg-muted dark:bg-muted/50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Course</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Assessment</th>

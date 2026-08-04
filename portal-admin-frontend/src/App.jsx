@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import { ToastProvider } from './hooks/useToast';
@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import Attendance from './pages/Attendance';
 import Payments from './pages/Payments';
 import Internships from './pages/Internships';
+import StudentInternship from './pages/StudentInternship';
 import GradesDeadlines from './pages/GradesDeadlines';
 import WebhookLog from './pages/WebhookLog';
 import Settings from './pages/Settings';
@@ -48,7 +49,7 @@ export default function App() {
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/attendance" element={<Attendance />} />
                   <Route path="/payments" element={<Payments />} />
-                  <Route path="/internships" element={<Internships />} />
+                  <Route path="/internships" element={<Internships />} />`n                    <Route path="/student-internship" element={<StudentInternship />} />
                   <Route path="/grades" element={<GradesDeadlines />} />
                   <Route path="/webhooks" element={<WebhookLog />} />
                   <Route path="/settings" element={<Settings />} />

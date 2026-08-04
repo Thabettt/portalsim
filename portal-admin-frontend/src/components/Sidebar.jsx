@@ -10,7 +10,8 @@ import {
   Settings,
   Moon,
   Sun,
-  X
+  X,
+  GraduationCap
 } from 'lucide-react';
 import { getHealth } from '../api';
 import { useTheme } from '../hooks/useTheme';
@@ -19,7 +20,8 @@ const NAV_ITEMS = [
   { label: 'Dashboard', path: '/', icon: LayoutDashboard },
   { label: 'Attendance', path: '/attendance', icon: Users },
   { label: 'Payments', path: '/payments', icon: CreditCard },
-  { label: 'Internships', path: '/internships', icon: Briefcase },
+  { label: 'Internship Management', path: '/internships', icon: Briefcase },
+  { label: 'Student Internship', path: '/student-internship', icon: GraduationCap },
   { label: 'Grades & Deadlines', path: '/grades', icon: BookOpen },
   { label: 'Webhook Log', path: '/webhooks', icon: History },
   { label: 'Settings', path: '/settings', icon: Settings },
@@ -84,7 +86,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           onClick={() => {
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
           }}
-          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-muted-foreground bg-muted/50 hover:bg-muted border border-border/50 rounded-md transition-colors"
+          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-muted-foreground bg-muted dark:bg-muted/50 hover:bg-muted border border-border dark:border-border/50 rounded-md transition-colors"
         >
           <div className="flex items-center gap-2">
             <SearchIcon className="w-4 h-4" />
@@ -116,7 +118,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
         })}
       </nav>
 
-      <div className="p-4 border-t border-border bg-muted/20">
+      <div className="p-4 border-t border-border bg-muted dark:bg-muted/20">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <div className="relative flex items-center justify-center">

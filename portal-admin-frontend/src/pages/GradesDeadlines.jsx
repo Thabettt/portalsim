@@ -230,7 +230,7 @@ export default function GradesDeadlines() {
         <div className="space-y-8 mt-8">
           
           {/* Header */}
-          <div className="text-center bg-muted/30 py-4 rounded-md border border-border/50">
+          <div className="text-center bg-muted dark:bg-muted/30 py-4 rounded-md border border-border dark:border-border/50">
             <h2 className="text-lg font-bold text-foreground">
               {selectedStudent.student_id} {selectedStudent.full_name}
             </h2>
@@ -263,7 +263,7 @@ export default function GradesDeadlines() {
 
                 <div className="border rounded-md overflow-hidden bg-card">
                   <table className="min-w-full divide-y divide-border">
-                    <thead className="bg-muted/50">
+                    <thead className="bg-muted dark:bg-muted/50">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Quiz/Assignment</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Element Name</th>
@@ -277,7 +277,7 @@ export default function GradesDeadlines() {
                         <tr><td colSpan="5" className="p-4 text-center text-sm text-muted-foreground">No coursework found for this course.</td></tr>
                       ) : (
                         coursework.map((item, index) => (
-                          <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                          <tr key={item.id} className="hover:bg-muted dark:bg-muted/30 transition-colors">
                             <td className="px-4 py-3 text-sm capitalize">{item.title}</td>
                             <td className="px-4 py-3 text-sm">{item.title}</td>
                             <td className="px-4 py-3 text-sm font-medium">
@@ -317,7 +317,7 @@ export default function GradesDeadlines() {
                 <h3 className="text-sm font-medium text-foreground">Mid-Term Results</h3>
                 <div className="border rounded-md overflow-hidden bg-card">
                   <table className="min-w-full divide-y divide-border">
-                    <thead className="bg-muted/50">
+                    <thead className="bg-muted dark:bg-muted/50">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Course</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Percentage</th>
@@ -330,7 +330,7 @@ export default function GradesDeadlines() {
                         <tr><td colSpan="4" className="p-4 text-center text-sm text-muted-foreground">No midterms found.</td></tr>
                       ) : (
                         examSummary.filter(s => s.midterm).map((summary) => (
-                          <tr key={summary.course_id} className="hover:bg-muted/30 transition-colors">
+                          <tr key={summary.course_id} className="hover:bg-muted dark:bg-muted/30 transition-colors">
                             <td className="px-4 py-3 text-sm font-medium">{summary.courseStr}</td>
                             
                             <td className="px-4 py-3 text-sm">
@@ -372,7 +372,7 @@ export default function GradesDeadlines() {
                 <h3 className="text-sm font-medium text-foreground">Final Results</h3>
                 <div className="border rounded-md overflow-hidden bg-card">
                   <table className="min-w-full divide-y divide-border">
-                    <thead className="bg-muted/50">
+                    <thead className="bg-muted dark:bg-muted/50">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Course</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Percentage</th>
@@ -386,7 +386,7 @@ export default function GradesDeadlines() {
                         <tr><td colSpan="5" className="p-4 text-center text-sm text-muted-foreground">No finals found.</td></tr>
                       ) : (
                         examSummary.filter(s => s.final).map((summary) => (
-                          <tr key={summary.course_id} className="hover:bg-muted/30 transition-colors">
+                          <tr key={summary.course_id} className="hover:bg-muted dark:bg-muted/30 transition-colors">
                             <td className="px-4 py-3 text-sm font-medium">{summary.courseStr}</td>
                             
                             <td className="px-4 py-3 text-sm">

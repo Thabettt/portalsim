@@ -122,11 +122,19 @@ export async function getApprovedInternships() {
   return fetchApi("/admin/internships/approved");
 }
 
+export async function getAllInternships() {
+  return fetchApi("/admin/internships/all");
+}
+
 export async function submitInternshipProgressReport(internshipId, payload) {
   return fetchApi(`/admin/internships/${internshipId}/progress-reports`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function getInternshipProgressReports(internshipId) {
+  return fetchApi(`/admin/internships/${internshipId}/progress-reports`);
 }
 
 export async function getPendingProgressReports() {
@@ -135,6 +143,20 @@ export async function getPendingProgressReports() {
 
 export async function makeProgressReportDecision(reportId, payload) {
   return fetchApi(`/admin/internship-progress-reports/${reportId}/decision`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateInternshipRevisionReview(reviewType, payload) {
+  return fetchApi(`/admin/internships/revision-review/${reviewType}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateInternshipFinalStatus(internshipId, payload) {
+  return fetchApi(`/admin/internships/${internshipId}/final-status`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

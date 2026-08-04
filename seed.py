@@ -1,3 +1,4 @@
+import uuid
 #!/usr/bin/env python3
 """
 Database seeding script for University Portal Simulator.
@@ -15,7 +16,7 @@ from app.models import (
     WebhookLog, CourseSchedule,
     UserRole, AttendanceStatus, AttendanceWarningLevel,
     PaymentStatus, PaymentType, AssessmentType, InternshipStatus,
-    CourseEnrollmentStatus
+    CourseEnrollmentStatus, ProgressReportStatus
 )
 from app.services.attendance import calculate_warning_level, get_total_sessions
 from app.config import get_settings
@@ -28,24 +29,63 @@ settings = get_settings()
 
 # Demo data constants
 FIXED_STUDENTS = [
-    ("Abdulaziz", "thabetology@gmail.com"),
+    ("Abdulaziz", "alialnaggar.h@gmail.com"),
     ("Ali", "alialnaggar.h@gmail.com"),
-    ("Lakshy", "lakshyrupani.lr@gmail.com"),
-    ("Mohamed", "giuians2027@gmail.com"),
+    ("Lakshy", "alialnaggar.h@gmail.com"),
+    ("Mohamed", "alialnaggar.h@gmail.com"),
 ]
 
 STUDENT_NAMES = [
-    ("Ahmed Hassan", "ahmed.hassan@student.edu.eg"),
-    ("Fatima Ali", "fatima.ali@student.edu.eg"),
-    ("Mohamed Omar", "mohamed.omar@student.edu.eg"),
-    ("Aisha Mahmoud", "aisha.mahmoud@student.edu.eg"),
-    ("Youssef Ibrahim", "youssef.ibrahim@student.edu.eg"),
-    ("Mariam Adel", "mariam.adel@student.edu.eg"),
-    ("Karim Mostafa", "karim.mostafa@student.edu.eg"),
-    ("Nour El-Din", "nour.eldin@student.edu.eg"),
-    ("Sara Khaled", "sara.khaled@student.edu.eg"),
-    ("Omar Tarek", "omar.tarek@student.edu.eg"),
-    ("Laila Samir", "laila.samir@student.edu.eg"),
+    ("Essam El-Din", "alialnaggar.h@gmail.com"),
+    ("Khaled Yassin", "alialnaggar.h@gmail.com"),
+    ("Tarek Badr", "alialnaggar.h@gmail.com"),
+    ("Khaled Galal", "alialnaggar.h@gmail.com"),
+    ("Nada Kamel", "alialnaggar.h@gmail.com"),
+    ("Amr Hafez", "alialnaggar.h@gmail.com"),
+    ("Mennatullah Ahmed", "alialnaggar.h@gmail.com"),
+    ("Hala Farouk", "alialnaggar.h@gmail.com"),
+    ("Omar Hafez", "alialnaggar.h@gmail.com"),
+    ("Karim Saeed", "alialnaggar.h@gmail.com"),
+    ("Rola Said", "alialnaggar.h@gmail.com"),
+    ("Youssef Magdy", "alialnaggar.h@gmail.com"),
+    ("Salma Samir", "alialnaggar.h@gmail.com"),
+    ("Karim El-Din", "alialnaggar.h@gmail.com"),
+    ("Yasmine Zaki", "alialnaggar.h@gmail.com"),
+    ("Fatima Ali", "alialnaggar.h@gmail.com"),
+    ("Rania Nabil", "alialnaggar.h@gmail.com"),
+    ("Salma Hafez", "alialnaggar.h@gmail.com"),
+    ("Tarek Hossam", "alialnaggar.h@gmail.com"),
+    ("Mennatullah Saeed", "alialnaggar.h@gmail.com"),
+    ("Rola Saleh", "alialnaggar.h@gmail.com"),
+    ("Ghada Fares", "alialnaggar.h@gmail.com"),
+    ("Mariam Tarek", "alialnaggar.h@gmail.com"),
+    ("Nour Hafez", "alialnaggar.h@gmail.com"),
+    ("Nasser Farouk", "alialnaggar.h@gmail.com"),
+    ("Yasmine Galal", "alialnaggar.h@gmail.com"),
+    ("Farah Gomaa", "alialnaggar.h@gmail.com"),
+    ("Fatima Ashraf", "alialnaggar.h@gmail.com"),
+    ("Rania Magdy", "alialnaggar.h@gmail.com"),
+    ("Sara Essam", "alialnaggar.h@gmail.com"),
+    ("Nada Riad", "alialnaggar.h@gmail.com"),
+    ("Farah Ayman", "alialnaggar.h@gmail.com"),
+    ("Mohamed Said", "alialnaggar.h@gmail.com"),
+    ("Ghada Mostafa", "alialnaggar.h@gmail.com"),
+    ("Farah Helmy", "alialnaggar.h@gmail.com"),
+    ("Nada Tarek", "alialnaggar.h@gmail.com"),
+    ("Hoda Omar", "alialnaggar.h@gmail.com"),
+    ("Tarek Hassan", "alialnaggar.h@gmail.com"),
+    ("Karim Farouk", "alialnaggar.h@gmail.com"),
+    ("Hoda Hossam", "alialnaggar.h@gmail.com"),
+    ("Mostafa Shawky", "alialnaggar.h@gmail.com"),
+    ("Mariam Farouk", "alialnaggar.h@gmail.com"),
+    ("Salma Ali", "alialnaggar.h@gmail.com"),
+    ("Hassan Nabil", "alialnaggar.h@gmail.com"),
+    ("Essam Yassin", "alialnaggar.h@gmail.com"),
+    ("Aisha Khaled", "alialnaggar.h@gmail.com"),
+    ("Laila Wael", "alialnaggar.h@gmail.com"),
+    ("Sherif Mostafa", "alialnaggar.h@gmail.com"),
+    ("Dina Omar", "alialnaggar.h@gmail.com"),
+    ("Adel Hossam", "alialnaggar.h@gmail.com"),
 ]
 
 COURSES = [
@@ -62,11 +102,18 @@ COURSES = [
 ]
 
 INSTRUCTORS = [
-    ("Dr. Ahmed El-Sayed", "ahmed.elsayed@faculty.edu.eg"),
-    ("Prof. Mona Hassan", "mona.hassan@faculty.edu.eg"),
-    ("Dr. Karim Mahmoud", "karim.mahmoud@faculty.edu.eg"),
-    ("Prof. Aisha Omar", "aisha.omar@faculty.edu.eg"),
-    ("Dr. Youssef Nabil", "youssef.nabil@faculty.edu.eg"),
+    ("Dr. Mahmoud Hassan", "alialnaggar.h@gmail.com", "SUP001"),
+    ("Dr. Mona Ibrahim", "alialnaggar.h@gmail.com", "SUP002"),
+    ("Dr. Ahmed Mostafa", "alialnaggar.h@gmail.com", "SUP003"),
+    ("Dr. Yasmine Nabil", "alialnaggar.h@gmail.com", "SUP004"),
+    ("Dr. Khaled Amin", "alialnaggar.h@gmail.com", "SUP005"),
+    ("Dr. Rania Fouad", "alialnaggar.h@gmail.com", "SUP006"),
+    ("Dr. Heba Salah", "alialnaggar.h@gmail.com", "SUP007"),
+    ("Dr. Ahmed El-Sayed", "alialnaggar.h@gmail.com", "INS001"),
+    ("Prof. Mona Hassan", "alialnaggar.h@gmail.com", "INS002"),
+    ("Dr. Karim Mahmoud", "alialnaggar.h@gmail.com", "INS003"),
+    ("Prof. Aisha Omar", "alialnaggar.h@gmail.com", "INS004"),
+    ("Dr. Youssef Nabil", "alialnaggar.h@gmail.com", "INS005"),
 ]
 
 INTERNSHIP_COMPANIES = [
@@ -95,9 +142,9 @@ def generate_student_id(year: int, sequence: int) -> str:
 def create_instructors(session: Session) -> list:
     """Create instructor users"""
     instructors = []
-    for i, (name, email) in enumerate(INSTRUCTORS):
+    for i, (name, email, inst_id) in enumerate(INSTRUCTORS):
         instructor = User(
-            student_id=f"INS-2024-{i+1:03d}",
+            student_id=inst_id,
             email=email,
             full_name=name,
             role=UserRole.INSTRUCTOR,
@@ -114,30 +161,22 @@ def create_instructors(session: Session) -> list:
 
 
 def create_students(session: Session, year: int = 2024) -> list:
-    """Create student users"""
+    """Create student users deterministically for demonstration scenarios"""
     students = []
     
-    # Create fixed students first
-    for i, (name, email) in enumerate(FIXED_STUDENTS):
-        is_foreigner = (email == "lakshyrupani.lr@gmail.com")
+    DEMO_STUDENTS = [
+        ("STU001", "Ahmed Mohamed Hassan", "alialnaggar.h@gmail.com"),
+        ("STU002", "Sara Ahmed Ali", "alialnaggar.h@gmail.com"),
+        ("STU003", "Omar Khaled Mahmoud", "alialnaggar.h@gmail.com"),
+        ("STU004", "Mariam Sherif Adel", "alialnaggar.h@gmail.com"),
+        ("STU005", "Youssef Adel Ibrahim", "alialnaggar.h@gmail.com"),
+        ("STU006", "Nouran Hossam El-Din", "alialnaggar.h@gmail.com"),
+        ("STU007", "Fatma Wael Abdelrahman", "alialnaggar.h@gmail.com")
+    ]
+    
+    for stu_id, name, email in DEMO_STUDENTS:
         student = User(
-            student_id=generate_student_id(year, i + 1),
-            email=email,
-            full_name=name,
-            role=UserRole.STUDENT,
-            hashed_password="demo_hash",
-            is_active=True,
-            is_foreigner=is_foreigner,
-            id_card_image_url="/static/images/id_card.png"
-        )
-        session.add(student)
-        students.append(student)
-        
-    # Create random students
-    start_idx = len(FIXED_STUDENTS) + 1
-    for i, (name, email) in enumerate(STUDENT_NAMES):
-        student = User(
-            student_id=generate_student_id(year, start_idx + i),
+            student_id=stu_id,
             email=email,
             full_name=name,
             role=UserRole.STUDENT,
@@ -152,7 +191,7 @@ def create_students(session: Session, year: int = 2024) -> list:
     session.commit()
     for s in students:
         session.refresh(s)
-    logger.info(f"Created {len(students)} students")
+    logger.info(f"Created {len(students)} deterministic students")
     return students
 
 
@@ -438,60 +477,222 @@ def create_assessments(session: Session, students: list, courses: list):
 
 
 def create_internships(session: Session, students: list):
-    """Create internship applications"""
+    """Create internship applications with deterministic demo cases"""
     internships = []
-
-    # ~80% of students have internships to ensure we get plenty of entries
-    students_with_internships = random.sample(students, int(len(students) * 0.8))
-
-    for student in students_with_internships:
-        num_applications = random.randint(2, 4)
-        companies = random.sample(INTERNSHIP_COMPANIES, num_applications)
-
-        for company_name, position, location in companies:
-            start_date = date.today() + timedelta(days=random.randint(30, 120))
-            end_date = start_date + timedelta(days=random.randint(60, 120))
-
-            # Weight towards PENDING so the user has plenty to review
-            status = random.choice([
-                InternshipStatus.PENDING, InternshipStatus.PENDING, InternshipStatus.PENDING,
-                InternshipStatus.APPROVED, InternshipStatus.REJECTED, 
-                InternshipStatus.IN_PROGRESS, InternshipStatus.COMPLETED
-            ])
-            approved_by = None
-            approved_at = None
-            rejection_reason = None
-
-            if status in [InternshipStatus.APPROVED, InternshipStatus.IN_PROGRESS, InternshipStatus.COMPLETED]:
-                approved_by = 1  # First admin
-                approved_at = datetime.utcnow() - timedelta(days=random.randint(1, 30))
-            elif status == InternshipStatus.REJECTED:
-                rejection_reason = random.choice([
-                    "Position filled",
-                    "Requirements not met",
-                    "Insufficient experience",
-                    "Academic schedule conflict"
-                ])
-
-            internship = Internship(
-                student_id=student.id,
-                company_name=company_name,
-                position=position,
-                start_date=start_date,
-                end_date=end_date,
-                status=status,
-                description=f"Internship at {company_name} as {position}",
-                supervisor_name=f"Supervisor at {company_name}",
-                supervisor_email=f"supervisor@{company_name.lower().replace(' ', '')}.com",
-                approved_by=approved_by,
-                approved_at=approved_at,
-                rejection_reason=rejection_reason
+    
+    student_data = {
+        "STU001": {
+            "status": InternshipStatus.PENDING,
+            "acad_sup": "SUP001 - Dr. Mahmoud Hassan",
+            "country": "Egypt", "faculty": "Informatics and Computer Science",
+            "major1": "Business Informatics", "major2": None,
+            "company": "Oracle Egypt", "title": "Oracle Developer Intern", "dept": "Enterprise Applications",
+            "start": date(2026, 1, 15), "end": date(2026, 6, 15),
+            "entry": datetime(2026, 1, 10, 10, 30),
+            "source": "LinkedIn", "workplace": "Hybrid", "days": 5, "hours": 8,
+            "desc": "Maintain Oracle Forms applications, assist in bug fixing, develop SQL queries, support ERP enhancements, and document technical changes.",
+            "org_sup_name": "Karim Adel", "org_sup_title": "Senior Oracle Developer", "org_sup_mob": "+20 101 234 5678",
+            "cc_status": "pending", "sup_status": "pending", "cc_reason": None, "sup_reason": None,
+            "acad_final": "waiting", "cc_final": "waiting",
+            "proof": datetime(2026, 1, 9, 16, 12), "eval": None,
+            "reports": []
+        },
+        "STU002": {
+            "status": InternshipStatus.IN_PROGRESS,
+            "acad_sup": "SUP002 - Dr. Mona Ibrahim",
+            "country": "Egypt", "faculty": "Business Administration",
+            "major1": "Management", "major2": "Marketing",
+            "company": "Tanmeyah", "title": "Oracle Developer Intern", "dept": "Information Technology",
+            "start": date(2026, 1, 15), "end": date(2026, 6, 15),
+            "entry": datetime(2026, 1, 12, 9, 20),
+            "source": "Career Fair", "workplace": "On Site", "days": 5, "hours": 8,
+            "desc": "Maintain Oracle Forms and Reports, support ERP modules, develop SQL procedures, fix production issues, and participate in testing.",
+            "org_sup_name": "Mohamed Samir", "org_sup_title": "Senior Software Engineer", "org_sup_mob": "+20 100 456 7812",
+            "cc_status": "accepted", "sup_status": "accepted", "cc_reason": "Internship approved.", "sup_reason": "Approved for academic supervision.",
+            "acad_final": "waiting", "cc_final": "waiting",
+            "proof": datetime(2026, 1, 11, 11, 40), "eval": None,
+            "reports": [
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 1, 29), "feedback": "Excellent first report. Good overview of onboarding activities.", "content": "During my first two weeks, I completed the onboarding process, received access to Oracle Forms and Reports Builder, attended meetings with the ERP team, and learned the company's development workflow. I also explored the existing banking modules and documented the overall system architecture."},
+                {"status": ProgressReportStatus.REJECTED, "date": date(2026, 2, 12), "feedback": "Please include more technical details and explain your personal contribution.", "content": "I participated in resolving issues related to Oracle Forms, tested several existing reports, and reviewed SQL procedures used by the finance department. I also attended sprint meetings and documented the bugs identified during testing."},
+                {"status": ProgressReportStatus.PENDING, "date": date(2026, 2, 26), "feedback": None, "content": "During this period I developed enhancements for an Oracle Forms screen, wrote SQL queries to retrieve customer information, and worked closely with my mentor to understand deployment procedures."},
+                {"status": ProgressReportStatus.PENDING, "date": date(2026, 3, 12), "feedback": None, "content": "I optimized SQL queries to improve report performance, corrected validation issues in Oracle Forms, and participated in user acceptance testing with business stakeholders."},
+                {"status": ProgressReportStatus.PENDING, "date": date(2026, 3, 26), "feedback": None, "content": "I implemented minor feature requests, updated technical documentation, fixed reported defects, and assisted the development team during deployment preparation."}
+            ]
+        },
+        "STU003": {
+            "status": InternshipStatus.IN_PROGRESS,
+            "acad_sup": "SUP003 - Dr. Ahmed Mostafa",
+            "country": "Egypt", "faculty": "Engineering",
+            "major1": "Mechatronics Engineering", "major2": None,
+            "company": "Siemens Egypt", "title": "Automation Engineering Intern", "dept": "Industrial Automation",
+            "start": date(2026, 1, 15), "end": date(2026, 6, 15),
+            "entry": datetime(2026, 1, 8, 14, 0),
+            "source": "Internship Booklet", "workplace": "Hybrid", "days": 5, "hours": 8,
+            "desc": "Support PLC programming, automation testing, industrial control systems, technical documentation, and equipment commissioning.",
+            "org_sup_name": "Hany Fathy", "org_sup_title": "Automation Team Lead", "org_sup_mob": "+20 102 777 8811",
+            "cc_status": "accepted", "sup_status": "accepted", "cc_reason": "Approved.", "sup_reason": "Approved.",
+            "acad_final": "waiting", "cc_final": "waiting",
+            "proof": datetime(2026, 1, 9, 10, 0), "eval": datetime(2026, 6, 16, 10, 0),
+            "reports": [
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 1, 29), "feedback": None, "content": "Familiarized with PLC programming environments and basic logic gates. Assisted in reviewing existing SCADA configurations for minor projects."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 2, 12), "feedback": None, "content": "Participated in equipment testing and verified sensor calibrations. Documented the results for the engineering team."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 2, 26), "feedback": None, "content": "Worked on automation troubleshooting for a simulated assembly line. Identified and resolved a timing issue in the control loop."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 3, 12), "feedback": None, "content": "Helped draft technical documentation for the newly installed industrial control systems. Shadowed senior engineers during commissioning support."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 3, 26), "feedback": None, "content": "Monitored production performance remotely and analyzed data logs for process optimization."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 4, 9), "feedback": None, "content": "Optimized control system parameters to reduce cycle time by 5%. Presented findings to the automation team lead."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 4, 23), "feedback": None, "content": "Assisted in writing a new PLC script for an upcoming manufacturing client. Conducted initial simulations."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 5, 7), "feedback": None, "content": "Configured HMI panels to display real-time sensor data. Conducted user interface testing with operators."},
+                {"status": ProgressReportStatus.PENDING, "date": date(2026, 5, 21), "feedback": None, "content": "During this period I assisted in testing new PLC logic, verified safety interlocks, documented test results, and collaborated with senior engineers to resolve automation issues before deployment."},
+                {"status": ProgressReportStatus.PENDING, "date": date(2026, 6, 4), "feedback": None, "content": "I participated in the final commissioning phase, monitored production performance after deployment, prepared technical documentation, and presented my completed work to the engineering team."}
+            ]
+        },
+        "STU004": {
+            "status": InternshipStatus.IN_PROGRESS,
+            "acad_sup": "SUP004 - Dr. Yasmine Nabil",
+            "country": "Egypt", "faculty": "Biotechnology",
+            "major1": "Biotechnology", "major2": None,
+            "company": "EVA Pharma", "title": "Quality Assurance Intern", "dept": "Quality Assurance",
+            "start": date(2026, 1, 15), "end": date(2026, 6, 15),
+            "entry": datetime(2026, 1, 14, 10, 0),
+            "source": "Referral", "workplace": "On Site", "days": 5, "hours": 8,
+            "desc": "Assist in quality inspections, laboratory documentation, compliance verification, and quality reporting.",
+            "org_sup_name": "Dina Tarek", "org_sup_title": "QA Supervisor", "org_sup_mob": "+20 101 555 2211",
+            "cc_status": "accepted", "sup_status": "accepted", "cc_reason": None, "sup_reason": None,
+            "acad_final": "waiting", "cc_final": "waiting",
+            "proof": datetime(2026, 1, 14, 10, 0), "eval": None,
+            "reports": []
+        },
+        "STU005": {
+            "status": InternshipStatus.IN_PROGRESS,
+            "acad_sup": "SUP005 - Dr. Khaled Amin",
+            "country": "Egypt", "faculty": "Architecture",
+            "major1": "Architecture", "major2": "Urban Design",
+            "company": "ECG Engineering Consultants Group", "title": "Architectural Design Intern", "dept": "Design Office",
+            "start": date(2026, 1, 15), "end": date(2026, 6, 15),
+            "entry": datetime(2026, 1, 13, 10, 0),
+            "source": "LinkedIn", "workplace": "Hybrid", "days": 5, "hours": 8,
+            "desc": "Assist with architectural drawings, BIM models, site coordination, and design documentation.",
+            "org_sup_name": "Ahmed Ragab", "org_sup_title": "Senior Architect", "org_sup_mob": "+20 100 987 6543",
+            "cc_status": "accepted", "sup_status": "accepted", "cc_reason": None, "sup_reason": None,
+            "acad_final": "waiting", "cc_final": "waiting",
+            "proof": datetime(2026, 1, 13, 10, 0), "eval": None,
+            "reports": []
+        },
+        "STU006": {
+            "status": InternshipStatus.IN_PROGRESS,
+            "acad_sup": "SUP006 - Dr. Rania Fouad",
+            "country": "Egypt", "faculty": "Pharmaceuticals Engineering",
+            "major1": "Pharmaceutical Engineering", "major2": None,
+            "company": "Pharco Pharmaceuticals", "title": "Production Engineering Intern", "dept": "Production",
+            "start": date(2026, 1, 15), "end": date(2026, 6, 15),
+            "entry": datetime(2026, 1, 15, 10, 0),
+            "source": "Family Business", "workplace": "On Site", "days": 5, "hours": 8,
+            "desc": "Support pharmaceutical production, process monitoring, documentation, GMP compliance, and production planning.",
+            "org_sup_name": "Mahmoud Atef", "org_sup_title": "Production Manager", "org_sup_mob": "+20 102 333 1122",
+            "cc_status": "accepted", "sup_status": "accepted", "cc_reason": None, "sup_reason": None,
+            "acad_final": "waiting", "cc_final": "waiting",
+            "proof": datetime(2026, 1, 15, 10, 0), "eval": None,
+            "reports": []
+        },
+        "STU007": {
+            "status": InternshipStatus.COMPLETED,
+            "acad_sup": "SUP007 - Dr. Heba Salah",
+            "country": "Egypt", "faculty": "Informatics and Computer Science",
+            "major1": "Computer Science", "major2": "Artificial Intelligence",
+            "company": "Microsoft Egypt", "title": "Software Engineering Intern", "dept": "Azure Development",
+            "start": date(2026, 1, 15), "end": date(2026, 6, 15),
+            "entry": datetime(2026, 1, 10, 10, 0),
+            "source": "Career Fair", "workplace": "Hybrid", "days": 5, "hours": 8,
+            "desc": "Develop cloud applications, implement backend services, perform testing, fix bugs, and participate in agile software development.",
+            "org_sup_name": "Omar Ashraf", "org_sup_title": "Software Engineering Manager", "org_sup_mob": "+20 100 222 9988",
+            "cc_status": "accepted", "sup_status": "accepted", "cc_reason": None, "sup_reason": None,
+            "acad_final": "fulfilled", "cc_final": "fulfilled",
+            "proof": datetime(2026, 1, 9, 10, 0), "eval": datetime(2026, 6, 16, 10, 0),
+            "reports": [
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 1, 29), "feedback": None, "content": "Set up development environment, learned Azure core services, and familiarized with the CI/CD pipeline used for deployments."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 2, 12), "feedback": None, "content": "Implemented a basic backend REST API using ASP.NET Core for internal telemetry collection. Wrote unit tests for the endpoints."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 2, 26), "feedback": None, "content": "Integrated the telemetry API with an Azure SQL Database. Optimized entity framework queries to reduce latency."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 3, 12), "feedback": None, "content": "Worked on a frontend dashboard using React to visualize the telemetry data. Configured Azure App Service for hosting the dashboard."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 3, 26), "feedback": None, "content": "Participated in sprint planning and took ownership of three user stories related to user authentication via Microsoft Entra ID."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 4, 9), "feedback": None, "content": "Resolved bugs reported during integration testing. Reviewed pull requests from other interns and provided code feedback."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 4, 23), "feedback": None, "content": "Researched and implemented Azure Key Vault for securely storing API secrets. Updated technical documentation for the new architecture."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 5, 7), "feedback": None, "content": "Assisted in migrating legacy data processing scripts to Azure Functions, resulting in more scalable and cost-effective execution."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 5, 21), "feedback": None, "content": "Conducted a load testing session using Azure Load Testing to ensure the new architecture handles expected peak traffic."},
+                {"status": ProgressReportStatus.APPROVED, "date": date(2026, 6, 4), "feedback": None, "content": "Finalized the project documentation, fixed minor UI glitches in the dashboard, and delivered a final presentation of the project to the engineering team."}
+            ]
+        }
+    }
+    
+    for student in students:
+        if student.student_id not in student_data:
+            continue
+            
+        data = student_data[student.student_id]
+        
+        internship = Internship(
+            student_id=student.id,
+            company_name=data["company"],
+            position=data["title"],
+            departments=data["dept"],
+            start_date=data["start"],
+            end_date=data["end"],
+            entry_date=data["entry"],
+            status=data["status"],
+            description=data["desc"],
+            supervisor_name=data["org_sup_name"],
+            supervisor_email="alialnaggar.h@gmail.com",
+            supervisor_job_title=data["org_sup_title"],
+            supervisor_mobile=data["org_sup_mob"],
+            academic_supervisor_name=data["acad_sup"],
+            academic_supervisor_id=data["acad_sup"].split(" ")[0],
+            country=data["country"],
+            faculty=data["faculty"],
+            first_major=data["major1"],
+            second_major=data["major2"],
+            source_of_internship=data["source"],
+            workplace=data["workplace"],
+            days_per_week=data["days"],
+            hours_per_day=data["hours"],
+            proof_of_acceptance_uploaded_at=data["proof"],
+            evaluation_form_uploaded_at=data["eval"],
+            career_center_review_status=data["cc_status"],
+            career_center_review_reason=data["cc_reason"],
+            supervisor_review_status=data["sup_status"],
+            supervisor_review_reason=data["sup_reason"],
+            academic_final_status=data["acad_final"],
+            career_center_final_status=data["cc_final"]
+        )
+        
+        if data["status"] in [InternshipStatus.APPROVED, InternshipStatus.IN_PROGRESS, InternshipStatus.COMPLETED]:
+            internship.approved_by = 1
+            internship.approved_at = datetime.utcnow() - timedelta(days=80)
+            
+        session.add(internship)
+        session.commit()
+        session.refresh(internship)
+        internships.append(internship)
+        
+        # Create reports
+        for j, rep_data in enumerate(data["reports"]):
+            dt_report = datetime.combine(rep_data["date"], datetime.min.time())
+            
+            report = InternshipProgressReport(
+                internship_id=internship.id,
+                report_number=j + 1,
+                summary=rep_data["content"],
+                status=rep_data["status"],
+                review_notes=rep_data["feedback"],
+                reviewed_by=1 if rep_data["status"] != ProgressReportStatus.PENDING else None,
+                reviewed_at=datetime.utcnow() if rep_data["status"] != ProgressReportStatus.PENDING else None,
+                created_at=dt_report,
+                updated_at=dt_report
             )
-            session.add(internship)
-            internships.append(internship)
+            session.add(report)
+            
+        session.commit()
 
-    session.commit()
-    logger.info(f"Created {len(internships)} internship records")
+    logger.info(f"Created {len(internships)} deterministic internship records")
+
 
 
 def create_webhook_settings(session: Session):
@@ -538,7 +739,7 @@ def create_exam_remark_test_fixtures(session: Session, courses: list):
     """Create specific deterministic test cases for exam remark testing."""
     test_student = User(
         student_id="STU-9999-0001",
-        email="remark.test@giu-uni.edu.eg",
+        email="alialnaggar.h@gmail.com",
         full_name="Remark Test User",
         role=UserRole.STUDENT,
         hashed_password="demo_hash",

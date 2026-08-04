@@ -195,7 +195,7 @@ export default function AttendanceWarnings() {
 
       {selectedStudent && (
         <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-4 border-b bg-muted/20">
+          <CardHeader className="flex flex-row items-start justify-between gap-4 border-b bg-muted dark:bg-muted/20">
             <div>
               <CardTitle>Absence Report &mdash; {selectedStudent.full_name}</CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">{selectedStudent.student_id} &middot; Active attendance warnings only</p>
@@ -218,7 +218,7 @@ export default function AttendanceWarnings() {
             <>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-border">
-                  <thead className="bg-muted/50">
+                  <thead className="bg-muted dark:bg-muted/50">
                     <tr>
                       {['Course Code', 'Course Name', 'Current Warning Level', 'Update Warning Level', 'Change Status', 'Last Updated'].map(column => (
                         <th key={column} className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">{column}</th>
@@ -232,7 +232,7 @@ export default function AttendanceWarnings() {
                       const cleared = changed && draft === 'none';
                       const meta = LEVEL_META[row.warning_level];
                       return (
-                        <tr key={row.course_id} className={cleared ? 'bg-emerald-50/60 dark:bg-emerald-950/10' : 'hover:bg-muted/30'}>
+                        <tr key={row.course_id} className={cleared ? 'bg-emerald-50/60 dark:bg-emerald-950/10' : 'hover:bg-muted dark:bg-muted/30'}>
                           <td className="whitespace-nowrap px-5 py-4 text-sm font-semibold">{row.course_code}</td>
                           <td className="min-w-48 px-5 py-4 text-sm">{row.course_name}</td>
                           <td className="whitespace-nowrap px-5 py-4"><Badge variant="outline" className={meta.className}>{meta.label}</Badge></td>
@@ -287,7 +287,7 @@ export default function AttendanceWarnings() {
                     <p className="mt-1 text-sm text-muted-foreground">The attendance snapshot was sent to the notification workflow.</p>
                   </div>
                 </div>
-                <dl className="grid grid-cols-1 gap-3 rounded-md bg-muted/50 p-4 text-sm sm:grid-cols-2">
+                <dl className="grid grid-cols-1 gap-3 rounded-md bg-muted dark:bg-muted/50 p-4 text-sm sm:grid-cols-2">
                   <div><dt className="text-muted-foreground">Batch ID</dt><dd className="mt-1 break-all font-mono text-xs">{finalizeResult?.batch_id}</dd></div>
                   <div><dt className="text-muted-foreground">Finalized at</dt><dd className="mt-1">{formatUpdated(finalizeResult?.finalized_at)}</dd></div>
                   <div><dt className="text-muted-foreground">Students processed</dt><dd className="mt-1 font-semibold">{finalizeResult?.students_processed}</dd></div>

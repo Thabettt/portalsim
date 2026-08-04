@@ -1,6 +1,8 @@
 from datetime import datetime, date, timedelta
 from typing import List, Optional
+import httpx
 from sqlmodel import Session, select, func
+from app.config import get_settings
 from app.models import (
     User, Course, Assessment, AssessmentType, Internship, InternshipStatus,
     WebhookEventType, WebhookLog, WebhookSetting
@@ -13,6 +15,7 @@ from app.schemas.webhook_payloads import (
 import logging
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 def create_assessment(
@@ -261,6 +264,96 @@ def fire_internship_status_webhook(
     )
     logger.info(f"Internship status webhook fired: {student.student_id} - {internship.company_name} - {internship.status.value}")
     return webhook_log
+
+
+async def update_internship_revision_review(
+    session: Session,
+    student_email: str,
+    internship_title: str,
+    review_type: str,
+    new_status: str,
+    reason: Optional[str] = None,
+) -> Optional[Internship]:
+    """Update a career center or supervisor revision review status."""
+    if new_status not in {"accepted", "rejected"}:
+        raise ValueError("Revision review status must be accepted or rejected.")
+    if review_type not in {"career_center", "supervisor"}:
+        raise ValueError("Invalid revision review type.")
+
+    student = session.exec(select(User).where(User.email == student_email)).first()
+    if not student:
+        return None
+
+    internship = session.exec(
+        select(Internship)
+        .where(Internship.student_id == student.id)
+        .where(Internship.position == internship_title)
+        .order_by(Internship.created_at.desc())
+    ).first()
+    if not internship:
+        return None
+
+    if review_type == "career_center":
+        internship.career_center_review_status = new_status
+        internship.career_center_review_reason = reason
+    else:
+        internship.supervisor_review_status = new_status
+        internship.supervisor_review_reason = reason
+
+    internship.updated_at = datetime.utcnow()
+    session.add(internship)
+    session.commit()
+    session.refresh(internship)
+
+    if review_type == "career_center" and new_status == "rejected":
+        webhook_url = settings.n8n_internship_rejected_webhook_url.strip()
+        if webhook_url:
+            payload = {
+                "new_status": "rejected",
+                "internship_title": internship.position,
+                "student_email": student_email,
+            }
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                await client.post(webhook_url, json=payload)
+
+    return internship
+
+
+async def update_internship_final_status(
+    session: Session,
+    internship_id: int,
+    review_type: str,
+) -> Optional[Internship]:
+    internship = session.get(Internship, internship_id)
+    if not internship:
+        return None
+    if review_type not in {"academic", "career_center"}:
+        raise ValueError("Invalid final status type.")
+
+    if review_type == "academic":
+        internship.academic_final_status = "fulfilled"
+    else:
+        internship.career_center_final_status = "fulfilled"
+
+    internship.updated_at = datetime.utcnow()
+    session.add(internship)
+    session.commit()
+    session.refresh(internship)
+
+    if review_type == "academic":
+        student = session.get(User, internship.student_id)
+        webhook_url = settings.n8n_internship_final_status_webhook_url.strip()
+        if student and webhook_url:
+            payload = {
+                "academic_status": "fulfilled",
+                "career_center_status": internship.career_center_final_status or "waiting",
+                "student_email": student.email,
+                "internship_title": internship.position,
+            }
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                await client.post(webhook_url, json=payload)
+
+    return internship
 
 
 def get_student_grades_summary(session: Session, student_id: int) -> dict:
