@@ -60,25 +60,10 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 @router.post("/seed", response_model=SeedResponse)
-async def seed_database(session: Session = Depends(get_session)):
+def seed_database(session: Session = Depends(get_session)):
     """Wipe and reseed the database with demo data"""
-    # Delete all data in reverse order of dependencies
-    session.exec(sqlalchemy_delete(WebhookLog))
-    session.exec(sqlalchemy_delete(Attendance))
-    session.exec(sqlalchemy_delete(Payment))
-    session.exec(sqlalchemy_delete(Assessment))
-    session.exec(sqlalchemy_delete(InternshipProgressReport))
-    session.exec(sqlalchemy_delete(Internship))
-    session.exec(sqlalchemy_delete(CourseEnrollment))
-    session.exec(sqlalchemy_delete(Course))
-    session.exec(sqlalchemy_delete(User))
-    session.exec(sqlalchemy_delete(WebhookSetting))
-    session.exec(sqlalchemy_delete(SystemSetting))
-    session.commit()
-
-    # Import and run seed
-    from seed import seed_database
-    result = await seed_database(session)
+    from seed import seed_database as run_seed
+    result = run_seed(session)
     return SeedResponse(**result)
 
 

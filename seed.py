@@ -138,11 +138,16 @@ def generate_student_id(sequence: int) -> str:
     return f"STU{sequence:03d}"
 
 
-def seed_database():
+def seed_database(session: Session = None) -> dict:
     """Main database seeding function for 100 students and all entities"""
     logger.info("Starting database seeding for 100 students...")
 
-    with Session(engine) as session:
+    own_session = False
+    if session is None:
+        session = Session(engine)
+        own_session = True
+
+    try:
         # 1. Clean existing records
         logger.info("Cleaning existing database tables...")
         session.exec(delete(InternshipProgressReport))
@@ -230,13 +235,13 @@ def seed_database():
         students = []
 
         FIRST_7_STUDENTS = [
-            ("STU001", "Ahmed Mohamed Hassan", "alialnaggar.h@gmail.com", False),
-            ("STU002", "Sara Ahmed Ali", "alialnaggar.h@gmail.com", False),
-            ("STU003", "Omar Khaled Mahmoud", "alialnaggar.h@gmail.com", False),
-            ("STU004", "Mariam Sherif Adel", "alialnaggar.h@gmail.com", False),
-            ("STU005", "Youssef Adel Ibrahim", "alialnaggar.h@gmail.com", False),
-            ("STU006", "Nouran Hossam El-Din", "alialnaggar.h@gmail.com", False),
-            ("STU007", "Fatma Wael Abdelrahman", "alialnaggar.h@gmail.com", False),
+            ("STU001", "Ahmed Mohamed Hassan", "student001@university.edu", False),
+            ("STU002", "Sara Ahmed Ali", "student002@university.edu", False),
+            ("STU003", "Omar Khaled Mahmoud", "student003@university.edu", False),
+            ("STU004", "Mariam Sherif Adel", "student004@university.edu", False),
+            ("STU005", "Youssef Adel Ibrahim", "student005@university.edu", False),
+            ("STU006", "Nouran Hossam El-Din", "student006@university.edu", False),
+            ("STU007", "Fatma Wael Abdelrahman", "student007@university.edu", False),
         ]
 
         for stu_id, name, email, is_for in FIRST_7_STUDENTS:
@@ -913,15 +918,37 @@ def seed_database():
         session.commit()
 
         # Verification summary
-        total_students = session.exec(select(User).where(User.role == UserRole.STUDENT)).all()
+        total_users = session.exec(select(User)).all()
+        total_courses = session.exec(select(Course)).all()
+        total_enrollments = session.exec(select(CourseEnrollment)).all()
+        total_attendances = session.exec(select(Attendance)).all()
+        total_payments = session.exec(select(Payment)).all()
+        total_assessments = session.exec(select(Assessment)).all()
         total_internships = session.exec(select(Internship)).all()
-        total_reports = session.exec(select(InternshipProgressReport)).all()
 
         logger.info("================ SEEDING COMPLETE ================")
-        logger.info(f"Total Student Users: {len(total_students)}")
+        logger.info(f"Total Users: {len(total_users)}")
+        logger.info(f"Total Courses: {len(total_courses)}")
+        logger.info(f"Total Enrollments: {len(total_enrollments)}")
+        logger.info(f"Total Attendances: {len(total_attendances)}")
+        logger.info(f"Total Payments: {len(total_payments)}")
+        logger.info(f"Total Assessments: {len(total_assessments)}")
         logger.info(f"Total Internships: {len(total_internships)}")
-        logger.info(f"Total Progress Reports: {len(total_reports)}")
         logger.info("==================================================")
+
+        return {
+            "message": "Database seeded successfully",
+            "users_created": len(total_users),
+            "courses_created": len(total_courses),
+            "enrollments_created": len(total_enrollments),
+            "attendances_created": len(total_attendances),
+            "payments_created": len(total_payments),
+            "assessments_created": len(total_assessments),
+            "internships_created": len(total_internships),
+        }
+    finally:
+        if own_session:
+            session.close()
 
 
 if __name__ == "__main__":

@@ -16,10 +16,15 @@ async function fetchApi(endpoint, options = {}) {
   if (!response.ok) {
     let errorMessage = "An error occurred";
     try {
-      const errorData = await response.json();
-      errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+      const text = await response.text();
+      try {
+        const errorData = JSON.parse(text);
+        errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+      } catch {
+        errorMessage = text || response.statusText || "An error occurred";
+      }
     } catch (e) {
-      errorMessage = await response.text();
+      errorMessage = response.statusText || "An error occurred";
     }
     throw new Error(errorMessage);
   }
