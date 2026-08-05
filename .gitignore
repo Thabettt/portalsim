@@ -14,6 +14,7 @@ university_portal.db
 # Attendance simulator: enrollment seed is committed (stable across test days),
 # but the mutable per-day warning state is local-only.
 seeds/attendance_sim_state.json
+seeds/attendance_term.json
 
 # Python
 __pycache__/
@@ -24,3 +25,6 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Hermes desktop attachments (n8n exports, etc. - not repo content)
+.hermes/

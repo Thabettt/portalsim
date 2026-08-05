@@ -126,8 +126,15 @@ def build_chunk_payload(
     chunk_count: int,
     students: list[dict],
     warning_level_labels: dict | None = None,
+    today_date: str | None = None,
 ) -> dict:
-    """Build the per-chunk request body. chunk_index is 1-based."""
+    """Build the per-chunk request body. chunk_index is 1-based.
+
+    ``today_date`` is the *simulated* current day (``YYYY-MM-DD``). Every
+    session inside the chunk must be dated on or before it; n8n rejects the
+    chunk otherwise. It is a distinct field from ``finalized_at``, which is the
+    real-world wall-clock time the request actually left the portal.
+    """
     payload = {
         "finalize_id": finalize_id,
         "chunk_index": chunk_index,
@@ -135,9 +142,25 @@ def build_chunk_payload(
         "finalized_at": finalized_at,
         "students": students,
     }
+    if today_date:
+        payload["today_date"] = today_date
     if warning_level_labels:
         payload["warning_level_labels"] = warning_level_labels
     return payload
+
+
+def _is_duplicate_response(response) -> bool:
+    """True when n8n answered 200 with ``{"duplicate": true}``.
+
+    That means this exact ``finalize_id`` + ``chunk_index`` was already
+    received. It is a success, not a failure: the chunk landed on an earlier
+    attempt and must not be retried or counted as an error.
+    """
+    try:
+        body = response.json()
+    except Exception:  # pragma: no cover - non-JSON body is simply not a duplicate
+        return False
+    return bool(isinstance(body, dict) and body.get("duplicate"))
 
 
 def _job_progress(job: dict) -> dict:
@@ -150,12 +173,14 @@ def _job_progress(job: dict) -> dict:
     return {
         "finalize_id": job["finalize_id"],
         "finalized_at": job["finalized_at"],
+        "today_date": job.get("today_date"),
         "status": job["status"],
         "chunk_size": job["chunk_size"],
         "chunk_count": job["chunk_count"],
         "chunks_sent": len(sent),
         "chunks_failed": len(failed),
         "chunks_pending": len(pending),
+        "duplicates": len([c for c in sent if c.get("duplicate")]),
         "students_processed": job["students_count"],
         "course_records_sent": job["course_records_count"],
         "failed_chunks": [c["chunk_index"] for c in failed],
@@ -167,6 +192,8 @@ def _job_progress(job: dict) -> dict:
                 "attempts": c["attempts"],
                 "status_code": c["status_code"],
                 "error": c["error"],
+                "duplicate": c.get("duplicate", False),
+                "retryable": c.get("retryable", True),
             }
             for c in chunks
         ],
@@ -211,6 +238,7 @@ async def _send_chunk(client: httpx.AsyncClient, url: str, chunk: dict, job: dic
         chunk_count=job["chunk_count"],
         students=chunk["students"],
         warning_level_labels=job["warning_level_labels"],
+        today_date=job.get("today_date"),
     )
 
     for attempt in range(max_retries + 1):
@@ -238,19 +266,34 @@ async def _send_chunk(client: httpx.AsyncClient, url: str, chunk: dict, job: dic
             )
         else:
             chunk["status_code"] = response.status_code
-            # n8n answers 202 Accepted per chunk: this chunk was received,
+            # n8n answers per chunk: 202 Accepted means THIS chunk was received,
             # NOT that the whole day has been processed.
             if 200 <= response.status_code < 300:
                 chunk["status"] = CHUNK_SENT
                 chunk["error"] = None
+                chunk["duplicate"] = _is_duplicate_response(response)
                 logger.info(
-                    "Chunk %s/%s of finalize %s accepted with HTTP %s",
+                    "Chunk %s/%s of finalize %s accepted with HTTP %s%s",
                     chunk["chunk_index"], job["chunk_count"], job["finalize_id"],
                     response.status_code,
+                    " (duplicate, already received)" if chunk["duplicate"] else "",
                 )
                 return
             body = (response.text or "")[:500]
             chunk["error"] = f"HTTP {response.status_code}: {body}" if body else f"HTTP {response.status_code}"
+
+            # 400 is a validation failure: the chunk is malformed, so resending
+            # the identical body would fail identically. Surface it immediately
+            # instead of burning three retries on a guaranteed rejection.
+            if response.status_code == 400:
+                chunk["status"] = CHUNK_FAILED
+                chunk["retryable"] = False
+                logger.error(
+                    "n8n rejected chunk %s/%s of finalize %s as invalid (HTTP 400): %s",
+                    chunk["chunk_index"], job["chunk_count"], job["finalize_id"], body,
+                )
+                return
+
             logger.warning(
                 "n8n rejected chunk %s/%s of finalize %s with HTTP %s (attempt %s)",
                 chunk["chunk_index"], job["chunk_count"], job["finalize_id"],
@@ -306,6 +349,80 @@ async def _run_finalization(job: dict, chunks: list[dict]) -> None:
         job["message"] = f"All {job['chunk_count']} chunks were accepted by the notification workflow."
 
 
+def _new_job(
+    students: list[dict],
+    finalized_at: str,
+    chunk_size: int,
+    warning_level_labels: dict | None = None,
+    today_date: str | None = None,
+    course_records_count: int | None = None,
+) -> dict:
+    """Assemble a finalize job (one shared finalize_id, N pending chunks)."""
+    student_chunks = split_into_chunks(students, chunk_size)
+    if course_records_count is None:
+        course_records_count = sum(len(s.get("courses", [])) for s in students)
+
+    return {
+        "finalize_id": str(uuid.uuid4()),
+        "finalized_at": finalized_at,
+        "today_date": today_date,
+        "warning_level_labels": warning_level_labels,
+        "status": JOB_RUNNING,
+        "chunk_size": chunk_size,
+        "chunk_count": len(student_chunks),
+        "students_count": len(students),
+        "course_records_count": course_records_count,
+        "message": f"Sending {len(student_chunks)} chunks to the notification workflow.",
+        "chunks": [
+            {
+                "chunk_index": index,
+                "students": chunk_students,
+                "status": CHUNK_PENDING,
+                "attempts": 0,
+                "status_code": None,
+                "error": None,
+                "duplicate": False,
+                "retryable": True,
+            }
+            for index, chunk_students in enumerate(student_chunks, start=1)
+        ],
+    }
+
+
+async def start_chunked_submission(
+    students: list[dict],
+    finalized_at: str,
+    today_date: str,
+    chunk_size: int | None = None,
+    warning_level_labels: dict | None = None,
+) -> dict:
+    """Send an already-built student list to n8n in background chunks.
+
+    This is the entry point the term simulator uses: it has already generated
+    the schedule, recorded attendance against it and computed warning levels,
+    so it passes the finished records straight through rather than going back
+    to the database. Returns immediately with the initial progress payload.
+    """
+    _resolve_webhook_url()
+
+    if not students:
+        raise AttendanceFinalizationError("There are no students to finalize.")
+
+    settings = get_settings()
+    chunk_size = max(1, chunk_size or settings.attendance_chunk_size)
+
+    job = _new_job(
+        students=students,
+        finalized_at=finalized_at,
+        chunk_size=chunk_size,
+        warning_level_labels=warning_level_labels,
+        today_date=today_date,
+    )
+    _register_job(job)
+    job["task"] = asyncio.create_task(_run_finalization(job, job["chunks"]))
+    return _job_progress(job)
+
+
 async def start_attendance_finalization(session: Session) -> dict:
     """Build the snapshot, split it into chunks and start sending them in the background.
 
@@ -320,32 +437,13 @@ async def start_attendance_finalization(session: Session) -> dict:
     if not students:
         raise AttendanceFinalizationError("There are no active students to finalize.")
 
-    chunk_size = max(1, settings.attendance_chunk_size)
-    student_chunks = split_into_chunks(students, chunk_size)
-
-    finalize_id = str(uuid.uuid4())
-    job = {
-        "finalize_id": finalize_id,
-        "finalized_at": snapshot["finalized_at"],
-        "warning_level_labels": snapshot["warning_level_labels"],
-        "status": JOB_RUNNING,
-        "chunk_size": chunk_size,
-        "chunk_count": len(student_chunks),
-        "students_count": snapshot["students_count"],
-        "course_records_count": snapshot["course_records_count"],
-        "message": f"Sending {len(student_chunks)} chunks to the notification workflow.",
-        "chunks": [
-            {
-                "chunk_index": index,
-                "students": chunk_students,
-                "status": CHUNK_PENDING,
-                "attempts": 0,
-                "status_code": None,
-                "error": None,
-            }
-            for index, chunk_students in enumerate(student_chunks, start=1)
-        ],
-    }
+    job = _new_job(
+        students=students,
+        finalized_at=snapshot["finalized_at"],
+        chunk_size=max(1, settings.attendance_chunk_size),
+        warning_level_labels=snapshot["warning_level_labels"],
+        course_records_count=snapshot["course_records_count"],
+    )
     _register_job(job)
 
     job["task"] = asyncio.create_task(_run_finalization(job, job["chunks"]))
@@ -364,13 +462,24 @@ async def resend_failed_chunks(finalize_id: str) -> dict:
     if not failed:
         return _job_progress(job)
 
-    for chunk in failed:
+    # A 400 means the body itself is invalid. Resending the identical chunk
+    # would be rejected identically, so it stays failed and keeps its error
+    # visible instead of silently looping.
+    retryable = [c for c in failed if c.get("retryable", True)]
+    if not retryable:
+        job["message"] = (
+            f"{len(failed)} chunk(s) failed validation (HTTP 400) and cannot be resent unchanged. "
+            "Fix the payload and finalize again."
+        )
+        return _job_progress(job)
+
+    for chunk in retryable:
         chunk["status"] = CHUNK_PENDING
         chunk["attempts"] = 0
         chunk["status_code"] = None
         chunk["error"] = None
 
     job["status"] = JOB_RUNNING
-    job["message"] = f"Resending {len(failed)} failed chunks."
-    job["task"] = asyncio.create_task(_run_finalization(job, failed))
+    job["message"] = f"Resending {len(retryable)} failed chunks."
+    job["task"] = asyncio.create_task(_run_finalization(job, retryable))
     return _job_progress(job)

@@ -94,7 +94,7 @@ class AttendanceSimTests(unittest.TestCase):
             self.assertIn(f"+{tag}@", student["recipient"])
 
     def test_every_student_has_3_to_6_unique_courses_from_catalog(self):
-        catalog = {c for c, _ in attendance_sim.COURSE_CATALOG}
+        catalog = {c for c, _, _ in attendance_sim.COURSE_CATALOG}
         self.assertGreaterEqual(len(catalog), 15)
         self.assertLessEqual(len(catalog), 20)
         for student in self.enrollment["students"]:

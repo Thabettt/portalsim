@@ -24,6 +24,7 @@ from app.services.n8n_attendance import (
     resend_failed_chunks,
     split_into_chunks,
     start_attendance_finalization,
+    start_chunked_submission,
 )
 
 
@@ -266,6 +267,131 @@ class N8NAttendanceTests(unittest.IsolatedAsyncioTestCase):
         failed_chunk = next(c for c in progress["chunks"] if c["chunk_index"] == 3)
         self.assertEqual(failed_chunk["attempts"], 4)
         self.assertEqual(failed_chunk["error"], "Request timed out.")
+
+    # ---- response handling (spec section 8) ------------------------------
+
+    async def test_400_is_not_retried_and_surfaces_its_message(self):
+        """A malformed chunk fails identically on resend, so it must not loop."""
+        FakeAsyncClient.behaviour = {
+            2: [FakeResponse(400, {"error": "session dated after today_date"},
+                             text="session dated after today_date")] * 4,
+        }
+        started = await self._finalize_and_wait(fake_settings())
+        progress = get_finalization_progress(started["finalize_id"])
+
+        rejected = next(c for c in progress["chunks"] if c["chunk_index"] == 2)
+        self.assertEqual(rejected["status"], "failed")
+        self.assertEqual(rejected["status_code"], 400)
+        self.assertEqual(rejected["attempts"], 1, "400 must not be retried")
+        self.assertFalse(rejected["retryable"])
+        self.assertIn("session dated after today_date", rejected["error"])
+
+        attempts_for_chunk_2 = [p for p in FakeAsyncClient.posts if p["chunk_index"] == 2]
+        self.assertEqual(len(attempts_for_chunk_2), 1)
+
+    async def test_resend_skips_chunks_that_failed_validation(self):
+        FakeAsyncClient.behaviour = {2: [FakeResponse(400, text="bad payload")] * 4}
+        started = await self._finalize_and_wait(fake_settings())
+        self.assertEqual(get_finalization_progress(started["finalize_id"])["failed_chunks"], [2])
+
+        FakeAsyncClient.posts = []
+        with (
+            patch("app.services.n8n_attendance.get_settings", return_value=fake_settings()),
+            patch("app.services.n8n_attendance.httpx.AsyncClient", FakeAsyncClient),
+        ):
+            await resend_failed_chunks(started["finalize_id"])
+
+        self.assertEqual(FakeAsyncClient.posts, [], "a 400 chunk must not be resent unchanged")
+
+    async def test_200_duplicate_counts_as_success_and_is_not_retried(self):
+        FakeAsyncClient.behaviour = {
+            1: [FakeResponse(200, {"duplicate": True})],
+        }
+        started = await self._finalize_and_wait(fake_settings())
+        progress = get_finalization_progress(started["finalize_id"])
+
+        self.assertEqual(progress["status"], "completed")
+        self.assertEqual(progress["chunks_failed"], 0)
+        duplicate = next(c for c in progress["chunks"] if c["chunk_index"] == 1)
+        self.assertEqual(duplicate["status"], "sent")
+        self.assertEqual(duplicate["attempts"], 1)
+        self.assertTrue(duplicate["duplicate"])
+        self.assertEqual(progress["duplicates"], 1)
+
+    async def test_500_is_retried_because_storage_errors_are_transient(self):
+        FakeAsyncClient.behaviour = {
+            1: [FakeResponse(500, text="storage down"), FakeResponse(202, {"accepted": True})],
+        }
+        started = await self._finalize_and_wait(fake_settings())
+        progress = get_finalization_progress(started["finalize_id"])
+
+        self.assertEqual(progress["status"], "completed")
+        recovered = next(c for c in progress["chunks"] if c["chunk_index"] == 1)
+        self.assertEqual(recovered["attempts"], 2)
+
+    async def test_every_chunk_shares_finalize_id_and_chunk_count(self):
+        started = await self._finalize_and_wait(fake_settings())
+        progress = get_finalization_progress(started["finalize_id"])
+
+        self.assertTrue(FakeAsyncClient.posts)
+        self.assertEqual(
+            {p["finalize_id"] for p in FakeAsyncClient.posts}, {started["finalize_id"]}
+        )
+        self.assertEqual(
+            {p["chunk_count"] for p in FakeAsyncClient.posts}, {progress["chunk_count"]}
+        )
+        self.assertEqual(
+            sorted(p["chunk_index"] for p in FakeAsyncClient.posts),
+            list(range(1, progress["chunk_count"] + 1)),
+        )
+        for post in FakeAsyncClient.posts:
+            self.assertIn("finalized_at", post)
+
+    async def test_term_submission_puts_today_date_on_every_chunk(self):
+        """The simulated 'today' must reach n8n, which rejects later sessions."""
+        students = [
+            {
+                "student_id": f"STU-{i:04d}",
+                "student_name": f"Student {i}",
+                "recipient": f"s{i}@example.com",
+                "courses": [{
+                    "course_id": "CS-401",
+                    "course_name": "Machine Learning",
+                    "warning_level": 1,
+                    "sessions": [
+                        {"date": "2026-08-03", "slot": 3,
+                         "session_type": "Lecture", "status": "absent"},
+                    ],
+                }],
+            }
+            for i in range(5)
+        ]
+        with (
+            patch("app.services.n8n_attendance.get_settings", return_value=fake_settings()),
+            patch("app.services.n8n_attendance.httpx.AsyncClient", FakeAsyncClient),
+        ):
+            started = await start_chunked_submission(
+                students=students,
+                finalized_at="2026-08-04T09:00:00Z",
+                today_date="2026-08-04",
+                chunk_size=2,
+            )
+            await self._await_job(started["finalize_id"])
+
+        progress = get_finalization_progress(started["finalize_id"])
+        self.assertEqual(progress["status"], "completed")
+        self.assertEqual(progress["chunk_count"], 3)
+        self.assertEqual(progress["today_date"], "2026-08-04")
+
+        self.assertEqual(len(FakeAsyncClient.posts), 3)
+        for post in FakeAsyncClient.posts:
+            self.assertEqual(post["today_date"], "2026-08-04")
+            self.assertEqual(post["finalized_at"], "2026-08-04T09:00:00Z")
+            self.assertEqual(post["chunk_count"], 3)
+            for student in post["students"]:
+                for course in student["courses"]:
+                    for session in course["sessions"]:
+                        self.assertLessEqual(session["date"], post["today_date"])
 
     async def test_resend_failed_only_retries_failed_chunks(self):
         FakeAsyncClient.behaviour = {2: [FakeResponse(503, text="unavailable")] * 4}

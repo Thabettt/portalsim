@@ -241,3 +241,68 @@ export async function resetSimulator() {
 export async function getSimStudent(studentId) {
   return fetchApi(`/dev/attendance-sim/student/${encodeURIComponent(studentId)}`);
 }
+
+// ==== DEV-ONLY: FIXED 12-WEEK TERM ====
+// Week 1-12 x Sunday-Thursday. "Today" is whatever point the user has
+// simulated up to, never the real calendar date.
+export async function getTerm() {
+  return fetchApi("/dev/attendance-sim/term");
+}
+
+export async function regenerateTerm({ seed, absenceRate } = {}) {
+  const params = new URLSearchParams();
+  if (seed !== undefined && seed !== null && seed !== '') params.append("seed", String(seed));
+  if (absenceRate !== undefined && absenceRate !== null) params.append("absence_rate", String(absenceRate));
+  const query = params.toString();
+  return fetchApi(`/dev/attendance-sim/term/regenerate${query ? `?${query}` : ''}`, { method: "POST" });
+}
+
+export async function getTermDay(weekNumber, weekday) {
+  const params = new URLSearchParams({
+    week_number: String(weekNumber),
+    weekday: String(weekday),
+  });
+  return fetchApi(`/dev/attendance-sim/term/day?${params}`);
+}
+
+export async function getSimPoint() {
+  return fetchApi("/dev/attendance-sim/term/point");
+}
+
+export async function setSimPoint(weekNumber, weekday) {
+  const params = new URLSearchParams({
+    week_number: String(weekNumber),
+    weekday: String(weekday),
+  });
+  return fetchApi(`/dev/attendance-sim/term/point?${params}`, { method: "POST" });
+}
+
+export async function previewTermFinalize({ weekNumber, weekday, chunkSize = 200, previewChunk = 1 }) {
+  const params = new URLSearchParams({
+    week_number: String(weekNumber),
+    weekday: String(weekday),
+    chunk_size: String(chunkSize),
+    preview_chunk: String(previewChunk),
+  });
+  return fetchApi(`/dev/attendance-sim/term/finalize-preview?${params}`, { method: "POST" });
+}
+
+export async function finalizeTerm({ weekNumber, weekday, chunkSize }) {
+  const params = new URLSearchParams({
+    week_number: String(weekNumber),
+    weekday: String(weekday),
+  });
+  if (chunkSize) params.append("chunk_size", String(chunkSize));
+  return fetchApi(`/dev/attendance-sim/term/finalize?${params}`, { method: "POST" });
+}
+
+export async function getTermFinalizeProgress(finalizeId) {
+  return fetchApi(`/dev/attendance-sim/term/finalize/${encodeURIComponent(finalizeId)}`);
+}
+
+export async function resendTermFailedChunks(finalizeId) {
+  return fetchApi(
+    `/dev/attendance-sim/term/finalize/${encodeURIComponent(finalizeId)}/resend-failed`,
+    { method: "POST" }
+  );
+}

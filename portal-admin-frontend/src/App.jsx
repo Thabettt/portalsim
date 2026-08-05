@@ -15,6 +15,7 @@ import Settings from './pages/Settings';
 import StudentDetail from './pages/StudentDetail';
 import StudentWarningStatus from './pages/StudentWarningStatus';
 import AttendanceSimulator from './pages/AttendanceSimulator';
+import TermSimulator from './pages/TermSimulator';
 
 export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -58,6 +59,9 @@ export default function App() {
                   <Route path="/warning-status" element={<StudentWarningStatus />} />
                   {import.meta.env.DEV && (
                     <Route path="/attendance-simulator" element={<AttendanceSimulator />} />
+                  )}
+                  {import.meta.env.DEV && (
+                    <Route path="/term-simulator" element={<TermSimulator />} />
                   )}
                 </Routes>
               </div>

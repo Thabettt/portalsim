@@ -21,9 +21,11 @@ import json
 import os
 import random
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+from app.services import term_attendance, term_schedule
 
 # --------------------------------------------------------------------------
 # Paths / configuration
@@ -33,6 +35,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SEED_DIR = Path(os.getenv("ATTENDANCE_SIM_SEED_DIR", REPO_ROOT / "seeds"))
 ENROLLMENT_PATH = SEED_DIR / "attendance_enrollment.json"
 STATE_PATH = SEED_DIR / "attendance_sim_state.json"
+TERM_PATH = SEED_DIR / "attendance_term.json"
 
 DEFAULT_STUDENT_COUNT = int(os.getenv("ATTENDANCE_SIM_STUDENTS", "3000"))
 DEFAULT_ID_YEAR = int(os.getenv("ATTENDANCE_SIM_ID_YEAR", "2024"))
@@ -72,32 +75,41 @@ W_JUMP = 0.10          # multi-level jump or a straight drop to level 3
 # simulated day, to stress the repeat-notification path.
 REPEAT_RATE = float(os.getenv("ATTENDANCE_SIM_REPEAT_RATE", "0.025"))
 
+# Share of scheduled sessions a student misses. Drives the derived warning
+# levels: absences are counted against the course's full term length.
+DEFAULT_ABSENCE_RATE = float(os.getenv("ATTENDANCE_SIM_ABSENCE_RATE", "0.15"))
+
 # --------------------------------------------------------------------------
 # Course catalog (18 courses, mixed departments and levels)
 # --------------------------------------------------------------------------
+#
+# ``(code, name, credit_hours)``. Credit hours drive how many slots a course
+# holds per week -- see ``app.services.term_schedule``:
+#   4 -> 1 slot/week, 6 -> alternating 1/2, 8 -> 2 slots/week.
 
-COURSE_CATALOG: List[Tuple[str, str]] = [
-    ("CS-101", "Introduction to Computer Science"),
-    ("CS-201", "Data Structures and Algorithms"),
-    ("CS-301", "Database Systems"),
-    ("CS-302", "Operating Systems"),
-    ("CS-401", "Machine Learning"),
-    ("CS-402", "Computer Networks"),
-    ("SE-210", "Software Engineering Principles"),
-    ("SE-330", "Web Application Development"),
-    ("DS-220", "Statistical Methods for Data Science"),
-    ("DS-410", "Big Data Analytics"),
-    ("MA-101", "Calculus I"),
-    ("MA-201", "Linear Algebra"),
-    ("MA-305", "Discrete Mathematics"),
-    ("PH-101", "Physics I"),
-    ("PH-202", "Electricity and Magnetism"),
-    ("EN-101", "Technical English"),
-    ("BA-150", "Principles of Management"),
-    ("EE-240", "Digital Logic Design"),
+COURSE_CATALOG: List[Tuple[str, str, int]] = [
+    ("CS-101", "Introduction to Computer Science", 4),
+    ("CS-201", "Data Structures and Algorithms", 8),
+    ("CS-301", "Database Systems", 6),
+    ("CS-302", "Operating Systems", 6),
+    ("CS-401", "Machine Learning", 8),
+    ("CS-402", "Computer Networks", 6),
+    ("SE-210", "Software Engineering Principles", 4),
+    ("SE-330", "Web Application Development", 6),
+    ("DS-220", "Statistical Methods for Data Science", 6),
+    ("DS-410", "Big Data Analytics", 8),
+    ("MA-101", "Calculus I", 8),
+    ("MA-201", "Linear Algebra", 6),
+    ("MA-305", "Discrete Mathematics", 4),
+    ("PH-101", "Physics I", 6),
+    ("PH-202", "Electricity and Magnetism", 6),
+    ("EN-101", "Technical English", 4),
+    ("BA-150", "Principles of Management", 4),
+    ("EE-240", "Digital Logic Design", 6),
 ]
 
-COURSE_NAMES: Dict[str, str] = dict(COURSE_CATALOG)
+COURSE_NAMES: Dict[str, str] = {code: name for code, name, _ in COURSE_CATALOG}
+COURSE_CREDIT_HOURS: Dict[str, int] = {code: credits for code, _, credits in COURSE_CATALOG}
 
 MIN_COURSES_PER_STUDENT = 3
 MAX_COURSES_PER_STUDENT = 6
@@ -178,12 +190,19 @@ def build_enrollment_seed(
         sid = _student_id(sequence, id_year)
         name = f"{rng.choice(FIRST_NAMES)} {rng.choice(LAST_NAMES)}"
         n_courses = rng.randint(MIN_COURSES_PER_STUDENT, MAX_COURSES_PER_STUDENT)
-        codes = sorted(rng.sample([code for code, _ in COURSE_CATALOG], n_courses))
+        codes = sorted(rng.sample([code for code, _, _ in COURSE_CATALOG], n_courses))
         students.append({
             "student_id": sid,
             "student_name": name,
             "recipient": recipient_for(sid, inbox),
-            "courses": [{"course_id": code, "course_name": COURSE_NAMES[code]} for code in codes],
+            "courses": [
+                {
+                    "course_id": code,
+                    "course_name": COURSE_NAMES[code],
+                    "credit_hours": COURSE_CREDIT_HOURS[code],
+                }
+                for code in codes
+            ],
         })
 
     course_records = sum(len(s["courses"]) for s in students)
@@ -193,7 +212,10 @@ def build_enrollment_seed(
         "test_inbox": inbox,
         "students_count": len(students),
         "course_records_count": course_records,
-        "course_catalog": [{"course_id": c, "course_name": n} for c, n in COURSE_CATALOG],
+        "course_catalog": [
+            {"course_id": c, "course_name": n, "credit_hours": credits}
+            for c, n, credits in COURSE_CATALOG
+        ],
         "students": students,
     }
 
@@ -229,6 +251,93 @@ def load_enrollment_seed(auto_create: bool = True) -> dict:
 
 
 # --------------------------------------------------------------------------
+# Term state (schedule + full-term attendance, generated once)
+# --------------------------------------------------------------------------
+
+def _catalog_with_credit_hours(enrollment: dict) -> List[dict]:
+    """Course catalog guaranteed to carry credit hours.
+
+    Enrollment seeds written before credit hours existed have no
+    ``credit_hours`` key. Silently defaulting those to 4 would make every
+    course a 1-slot-per-week course and quietly destroy the 6/8-credit rules,
+    so fall back to the catalog constant and only then to 4.
+    """
+    catalog = enrollment.get("course_catalog") or []
+    resolved: List[dict] = []
+    for course in catalog:
+        code = course["course_id"]
+        credits = course.get("credit_hours")
+        if credits is None:
+            credits = COURSE_CREDIT_HOURS.get(code, 4)
+        resolved.append({"course_id": code, "credit_hours": int(credits)})
+    return resolved
+
+
+def build_term(
+    enrollment: Optional[dict] = None,
+    term_start: Optional[date] = None,
+    seed: int = DEFAULT_SEED,
+    absence_rate: float = DEFAULT_ABSENCE_RATE,
+) -> dict:
+    """Generate the 12-week schedule and the attendance recorded against it."""
+    enrollment = enrollment or load_enrollment_seed()
+    if term_start is None:
+        term_start = term_schedule.term_start_sunday(date.today())
+    return term_attendance.build_term_state(
+        enrollment=enrollment,
+        term_start=term_start,
+        seed=seed,
+        absence_rate=absence_rate,
+        courses=_catalog_with_credit_hours(enrollment),
+    )
+
+
+def load_term(
+    enrollment: Optional[dict] = None,
+    auto_create: bool = True,
+) -> dict:
+    """Load the persisted term, generating it once on first use.
+
+    The schedule is deliberately read from disk rather than rebuilt: slot days
+    are randomised at generation time, so regenerating on every page load would
+    move a course's sessions out from under attendance already recorded.
+    """
+    existing = _read_json(TERM_PATH)
+    if existing is not None:
+        return existing
+    if not auto_create:
+        raise FileNotFoundError(
+            f"No term schedule at {TERM_PATH}. Generate it first."
+        )
+    term = build_term(enrollment)
+    _write_json(TERM_PATH, term)
+    return term
+
+
+def regenerate_term(
+    enrollment: Optional[dict] = None,
+    term_start: Optional[date] = None,
+    seed: Optional[int] = None,
+    absence_rate: float = DEFAULT_ABSENCE_RATE,
+) -> dict:
+    """Re-roll the schedule and attendance from scratch, and persist it.
+
+    This resets the simulated day too: the old day pointer refers to a schedule
+    that no longer exists.
+    """
+    enrollment = enrollment or load_enrollment_seed()
+    term = build_term(
+        enrollment=enrollment,
+        term_start=term_start,
+        seed=DEFAULT_SEED if seed is None else seed,
+        absence_rate=absence_rate,
+    )
+    _write_json(TERM_PATH, term)
+    reset_state(enrollment)
+    return term
+
+
+# --------------------------------------------------------------------------
 # Simulation state (mutable warning levels)
 # --------------------------------------------------------------------------
 
@@ -238,6 +347,8 @@ def _new_state(enrollment: dict) -> dict:
         "created_at": _utc_now_iso(),
         "updated_at": _utc_now_iso(),
         "day_number": 0,
+        "week_number": 1,
+        "weekday": term_schedule.SUNDAY,
         "last_finalize_id": None,
         "history": [],
         "levels": {
@@ -532,4 +643,131 @@ def student_timeline(student_id: str) -> dict:
             }
             for course in match["courses"]
         ],
+    }
+
+
+# --------------------------------------------------------------------------
+# Term-based API (fixed 12-week structure)
+# --------------------------------------------------------------------------
+
+def _term_start(term: dict) -> date:
+    return date.fromisoformat(term["term_start"])
+
+
+def resolve_point(week_number: int, weekday: int, term: Optional[dict] = None) -> date:
+    """Calendar date of a (week, weekday) point in the term."""
+    term = term or load_term()
+    return term_schedule.date_for(_term_start(term), week_number, weekday)
+
+
+def term_overview() -> dict:
+    """Static shape of the term plus each course's assigned days and slots.
+
+    This is what the UI needs to render the Week 1-12 selector and, inside a
+    week, the Sunday-Thursday day picker.
+    """
+    term = load_term()
+    schedule = term["schedule"]
+    return {
+        "term_start": term["term_start"],
+        "term_weeks": term["term_weeks"],
+        "weeks": list(range(1, term["term_weeks"] + 1)),
+        "teaching_weekdays": [
+            {"weekday": day, "weekday_name": term_schedule.WEEKDAY_NAMES[day]}
+            for day in term_schedule.TEACHING_WEEKDAYS
+        ],
+        "days": term_schedule.term_days(_term_start(term)),
+        "courses": [
+            {
+                "course_id": course["course_id"],
+                "course_name": COURSE_NAMES.get(course["course_id"], course["course_id"]),
+                "credit_hours": course["credit_hours"],
+                "weekdays": course["weekdays"],
+                "weekday_names": course["weekday_names"],
+                "slots": course["slots"],
+                "session_types": course["session_types"],
+                "total_sessions": len(course["sessions"]),
+            }
+            for course in (schedule["courses"][key] for key in sorted(schedule["courses"]))
+        ],
+    }
+
+
+def day_schedule(week_number: int, weekday: int) -> dict:
+    """Courses that actually meet on one specific day of the term.
+
+    Courses without a slot that day are simply not present in ``courses``.
+    """
+    term = load_term()
+    view = term_attendance.day_view(term, week_number, weekday)
+    for course in view["courses"]:
+        course["course_name"] = COURSE_NAMES.get(course["course_id"], course["course_id"])
+    return view
+
+
+def finalize_through(
+    week_number: int,
+    weekday: int,
+    chunk_size: Optional[int] = None,
+    finalize_id: Optional[str] = None,
+    finalized_at: Optional[str] = None,
+) -> dict:
+    """Build the finalize run for everything up to and including a term point.
+
+    Only sessions dated on or before that point enter the payload, so a
+    "send through Week 4, Monday" run carries no Week 5 data at all.
+    """
+    enrollment = load_enrollment_seed()
+    term = load_term(enrollment)
+    today = resolve_point(week_number, weekday, term)
+
+    payload = term_attendance.build_finalize_payload(
+        enrollment=enrollment,
+        term_state=term,
+        today=today,
+        chunk_size=chunk_size or DEFAULT_CHUNK_SIZE,
+        finalize_id=finalize_id,
+        finalized_at=finalized_at,
+    )
+    payload["summary"]["week_number"] = week_number
+    payload["summary"]["weekday"] = weekday
+    payload["summary"]["weekday_name"] = term_schedule.WEEKDAY_NAMES[weekday]
+    return payload
+
+
+def set_simulated_day(week_number: int, weekday: int) -> dict:
+    """Move the simulated 'today' pointer to a term point and persist it."""
+    enrollment = load_enrollment_seed()
+    term = load_term(enrollment)
+    day = resolve_point(week_number, weekday, term)
+
+    state = load_state(enrollment)
+    state["week_number"] = week_number
+    state["weekday"] = weekday
+    state["today_date"] = day.isoformat()
+    save_state(state)
+    return {
+        "week_number": week_number,
+        "weekday": weekday,
+        "weekday_name": term_schedule.WEEKDAY_NAMES[weekday],
+        "today_date": day.isoformat(),
+    }
+
+
+def current_point() -> dict:
+    """Where the simulation currently is in the term."""
+    enrollment = load_enrollment_seed()
+    term = load_term(enrollment)
+    state = load_state(enrollment)
+    week_number = int(state.get("week_number", 1))
+    weekday = int(state.get("weekday", term_schedule.SUNDAY))
+    return {
+        "week_number": week_number,
+        "weekday": weekday,
+        "weekday_name": term_schedule.WEEKDAY_NAMES[weekday],
+        "today_date": state.get(
+            "today_date", resolve_point(week_number, weekday, term).isoformat()
+        ),
+        "term_start": term["term_start"],
+        "term_weeks": term["term_weeks"],
     }

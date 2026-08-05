@@ -12,6 +12,7 @@ import {
   Sun,
   ShieldAlert,
   FlaskConical,
+  CalendarDays,
   X
 } from 'lucide-react';
 import { getHealth } from '../api';
@@ -28,7 +29,10 @@ const NAV_ITEMS = [
   { label: 'Settings', path: '/settings', icon: Settings },
   // Dev-only: stripped from production builds by Vite's dead-code elimination.
   ...(import.meta.env.DEV
-    ? [{ label: 'Attendance Simulator', path: '/attendance-simulator', icon: FlaskConical }]
+    ? [
+        { label: 'Attendance Simulator', path: '/attendance-simulator', icon: FlaskConical },
+        { label: 'Term Simulator', path: '/term-simulator', icon: CalendarDays },
+      ]
     : []),
 ];
 
