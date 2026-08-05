@@ -577,9 +577,9 @@ export default function StudentInternship() {
                                     {report.summary || 'No report content provided.'}
                                   </div>
 
-                                  {report.review_notes && (
+                                  {(report.review_notes || report.feedback) && String(report.review_notes || report.feedback).trim().length > 0 && (
                                     <div className="border-t border-border pt-2.5 mt-2">
-                                      <DetailItem label="Supervisor Feedback" value={report.review_notes} />
+                                      <DetailItem label="Supervisor Feedback" value={report.review_notes || report.feedback} />
                                     </div>
                                   )}
                                 </div>

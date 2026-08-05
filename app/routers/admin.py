@@ -403,12 +403,13 @@ async def decide_progress_report(
 ):
     logger.info(f"Incoming progress report decision request: {report_id} - {request}")
     """Approve or reject a bi-weekly report and queue its webhook event."""
+    notes = request.feedback if request.feedback is not None else request.review_notes
     try:
         result = update_progress_report_status(
             session,
             report_id,
             request.status,
-            request.review_notes,
+            notes,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

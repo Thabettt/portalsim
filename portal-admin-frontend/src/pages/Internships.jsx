@@ -165,9 +165,15 @@ export default function Internships() {
     setReportReviewAction({ internshipId, reportId: report.id, status });
     setReportReviewError('');
     try {
+      const targetRecord = records.find(r => r.id === internshipId);
+      const studentEmail = targetRecord ? (targetRecord.studentEmail || targetRecord.student_email || '') : '';
       const updatedReport = await makeProgressReportDecision(report.id, {
         status: status,
+        new_status: status === 'rejected' ? 'Rejected' : 'Approved',
+        progress_report_number: report.report_number,
+        student_email: studentEmail,
         review_notes: reviewNotes,
+        feedback: reviewNotes,
       });
 
       setReportsByInternship(prev => {
@@ -230,12 +236,33 @@ export default function Internships() {
     try {
       setRevisionActionState({ reviewType, recordId: record.id, status: newStatus });
       setRevisionError('');
-      const response = await updateInternshipRevisionReview(reviewType, {
-        student_email: record.studentEmail,
+
+      const rawDurationStr = record.duration || '';
+      let startDate = record.startDate || record.start_date || '2024-01-15';
+      if (rawDurationStr && rawDurationStr.includes('From ')) {
+        const parts = rawDurationStr.split(' ');
+        if (parts.length >= 2) startDate = parts[1];
+      }
+
+      const studentId = record.studentStringId || record.studentId || record.student_id || '';
+      const studentEmail = record.studentEmail || record.student_email || '';
+
+      const payload = {
+        student_id: studentId,
+        student_email: studentEmail,
         internship_title: record.position,
         new_status: newStatus,
         reason: revisionReasonDrafts[draftKey] || null,
-      });
+        start_date: startDate,
+      };
+
+      if (reviewType === 'career_center') {
+        payload.academic_supervisor_status = record.supervisorReviewStatus || record.supervisor_review_status || 'pending';
+      } else {
+        payload.career_center_status = record.careerCenterReviewStatus || record.career_center_review_status || 'pending';
+      }
+
+      const response = await updateInternshipRevisionReview(reviewType, payload);
       const updatedStatus = response?.status || newStatus;
       const updateFn = current => current.map(item => {
         if (String(item.id) !== String(record.id)) return item;

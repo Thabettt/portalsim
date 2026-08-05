@@ -303,6 +303,10 @@ class InternshipRevisionDecisionRequest(BaseModel):
     internship_title: str = Field(..., max_length=150)
     new_status: str = Field(..., pattern="^(accepted|rejected)$")
     reason: Optional[str] = Field(None, max_length=1000)
+    student_id: Optional[str] = None
+    academic_supervisor_status: Optional[str] = None
+    career_center_status: Optional[str] = None
+    start_date: Optional[str] = None
 
 
 class InternshipFinalStatusRequest(BaseModel):
@@ -449,6 +453,7 @@ class ProgressReportStatusUpdatePayload(WebhookBasePayload):
     new_status: ProgressReportStatus
     progress_report_number: int
     student_email: str
+    feedback: str = ""
 
 
 class AttendanceMarkedPayload(WebhookBasePayload):
@@ -532,6 +537,7 @@ class ProgressReportCreateRequest(BaseModel):
 class ProgressReportDecisionRequest(BaseModel):
     status: ProgressReportStatus
     review_notes: Optional[str] = Field(None, max_length=1000)
+    feedback: Optional[str] = Field(None, max_length=1000)
 
 
 class ProgressReportRead(BaseModel):

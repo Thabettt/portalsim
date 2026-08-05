@@ -201,11 +201,12 @@ async def _post_json(url: str, payload: dict) -> None:
         await client.post(url, json=payload)
 
 
-async def trigger_progress_report_reject_automation(session: Session, report: InternshipProgressReport, internship: Internship, student: User) -> None:
+async def trigger_progress_report_reject_automation(session: Session, report: InternshipProgressReport, internship: Internship, student: User, feedback: str = "") -> None:
     payload = {
         "new_status": "rejected",
         "progress_report_number": str(report.report_number),
         "student_email": student.email,
+        "feedback": feedback if feedback is not None else (report.review_notes or ""),
     }
     await _post_json(settings.n8n_progress_report_reject_webhook_url.strip(), payload)
 
