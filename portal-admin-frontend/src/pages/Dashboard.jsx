@@ -202,7 +202,7 @@ export default function Dashboard() {
             ) : jobs && jobs.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-border">
-                  <thead className="bg-muted/50">
+                  <thead className="bg-muted dark:bg-muted/50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Job Name</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Schedule</th>
@@ -212,7 +212,7 @@ export default function Dashboard() {
                   </thead>
                   <tbody className="bg-card divide-y divide-border">
                     {jobs.map((job) => (
-                      <tr key={job.id} className="hover:bg-muted/50 transition-colors">
+                      <tr key={job.id} className="hover:bg-muted dark:bg-muted/50 transition-colors">
                         <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-foreground">{job.name || job.id}</td>
                         <td className="px-6 py-3 whitespace-nowrap text-sm text-muted-foreground">
                            {job.trigger_type === 'cron' ? job.expression : job.trigger_type}

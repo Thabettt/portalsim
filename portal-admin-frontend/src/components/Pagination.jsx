@@ -6,7 +6,7 @@ export default function Pagination({ page, totalPages, onPageChange }) {
   if (totalPages <= 1) return null;
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20 sm:px-6">
+    <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted dark:bg-muted/20 sm:px-6">
       <div className="flex justify-between flex-1 sm:hidden">
         <Button
           variant="outline"

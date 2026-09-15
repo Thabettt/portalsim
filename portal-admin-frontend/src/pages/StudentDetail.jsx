@@ -81,7 +81,7 @@ export default function StudentDetail() {
             {student.name}
           </h1>
           <p className="text-muted-foreground mt-1 flex items-center gap-2">
-            <User className="w-4 h-4" /> {student.student_id} | {student.email}
+            <User className="w-4 h-4" /> {student.student_id} | {student.email?.replace(/\+[^@]+/, '')}
           </p>
         </div>
       </div>

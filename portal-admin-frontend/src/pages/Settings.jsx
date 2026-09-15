@@ -59,7 +59,7 @@ export default function Settings() {
       <div className="space-y-8 max-w-3xl animate-fade-in-up">
         <Skeleton className="h-10 w-48 mb-2" />
         <Card>
-          <CardHeader className="bg-muted/20 border-b">
+          <CardHeader className="bg-muted dark:bg-muted/20 border-b">
             <Skeleton className="h-6 w-48" />
           </CardHeader>
           <CardContent className="p-6 space-y-6">
@@ -80,7 +80,7 @@ export default function Settings() {
       </div>
 
       <Card>
-        <CardHeader className="border-b py-4 bg-muted/20 flex flex-row items-center gap-3">
+        <CardHeader className="border-b py-4 bg-muted dark:bg-muted/20 flex flex-row items-center gap-3">
           <ShieldCheck className="w-5 h-5 text-muted-foreground" />
           <CardTitle className="text-lg">Webhook Configuration</CardTitle>
         </CardHeader>
@@ -124,7 +124,7 @@ export default function Settings() {
               </label>
             </div>
           </CardContent>
-          <CardFooter className="px-6 py-4 border-t bg-muted/20">
+          <CardFooter className="px-6 py-4 border-t bg-muted dark:bg-muted/20">
             <Button
               type="submit"
               disabled={saving}

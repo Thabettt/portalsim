@@ -141,7 +141,7 @@ export default function WebhookLog() {
       <Card className="flex flex-col overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-border">
-            <thead className="bg-muted/50">
+            <thead className="bg-muted dark:bg-muted/50">
               <tr>
                 <th className="px-4 py-3 text-left w-8"></th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Time</th>
@@ -167,7 +167,7 @@ export default function WebhookLog() {
                 logs.map((log) => (
                   <React.Fragment key={log.id}>
                     <tr 
-                      className="hover:bg-muted/50 cursor-pointer transition-colors"
+                      className="hover:bg-muted dark:bg-muted/50 cursor-pointer transition-colors"
                       onClick={() => toggleExpand(log.id)}
                     >
                       <td className="px-4 py-4 whitespace-nowrap text-muted-foreground">
@@ -204,7 +204,7 @@ export default function WebhookLog() {
                       </td>
                     </tr>
                     {expandedLogId === log.id && (
-                      <tr className="bg-muted/20 border-b border-border">
+                      <tr className="bg-muted dark:bg-muted/20 border-b border-border">
                         <td colSpan="6" className="px-6 py-6">
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <div>

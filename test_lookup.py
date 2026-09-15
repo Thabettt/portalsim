@@ -1,6 +1,6 @@
 import requests
 
-url = "http://localhost:8001/api/grades/lookup"
+url = "http://localhost:6767/api/grades/lookup"
 headers = {"X-API-Key": "test-grades-key"}
 
 # 1. Valid lookup

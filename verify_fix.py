@@ -37,7 +37,7 @@ with Session(engine) as session:
             print("Set existing Final exam to unpublished.")
 
 # 2. Test the API for this unpublished grade
-url = "http://localhost:8001/api/grades/lookup"
+url = "http://localhost:6767/api/grades/lookup"
 headers = {"X-API-Key": "test-grades-key"}
 
 print("\n--- Test 1: Querying Unpublished Grade ---")

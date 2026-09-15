@@ -261,8 +261,29 @@ class InternshipBase(BaseModel):
     start_date: date
     end_date: date
     description: Optional[str] = Field(None, max_length=1000)
+    academic_supervisor_name: Optional[str] = Field(None, max_length=150)
     supervisor_name: Optional[str] = Field(None, max_length=150)
     supervisor_email: Optional[EmailStr] = None
+    supervisor_job_title: Optional[str] = Field(None, max_length=150)
+    supervisor_mobile: Optional[str] = Field(None, max_length=30)
+    country: Optional[str] = Field(None, max_length=100)
+    faculty: Optional[str] = Field(None, max_length=150)
+    first_major: Optional[str] = Field(None, max_length=150)
+    second_major: Optional[str] = Field(None, max_length=150)
+    source_of_internship: Optional[str] = Field(None, max_length=100)
+    workplace: Optional[str] = Field(None, max_length=100)
+    departments: Optional[str] = Field(None, max_length=500)
+    days_per_week: Optional[int] = Field(None, ge=1, le=7)
+    hours_per_day: Optional[int] = Field(None, ge=1, le=24)
+    entry_date: Optional[UTCDateTime] = None
+    proof_of_acceptance_uploaded_at: Optional[UTCDateTime] = None
+    evaluation_form_uploaded_at: Optional[UTCDateTime] = None
+    career_center_review_status: Optional[str] = Field(None, max_length=20)
+    career_center_review_reason: Optional[str] = Field(None, max_length=1000)
+    supervisor_review_status: Optional[str] = Field(None, max_length=20)
+    supervisor_review_reason: Optional[str] = Field(None, max_length=1000)
+    academic_final_status: Optional[str] = Field(None, max_length=20)
+    career_center_final_status: Optional[str] = Field(None, max_length=20)
 
 
 class InternshipCreate(InternshipBase):
@@ -275,6 +296,17 @@ class InternshipUpdate(BaseModel):
     supervisor_name: Optional[str] = Field(None, max_length=150)
     supervisor_email: Optional[EmailStr] = None
     rejection_reason: Optional[str] = Field(None, max_length=500)
+
+
+class InternshipRevisionDecisionRequest(BaseModel):
+    student_email: EmailStr
+    internship_title: str = Field(..., max_length=150)
+    new_status: str = Field(..., pattern="^(accepted|rejected)$")
+    reason: Optional[str] = Field(None, max_length=1000)
+
+
+class InternshipFinalStatusRequest(BaseModel):
+    review_type: str = Field(..., pattern="^(academic|career_center)$")
 
 
 class InternshipRead(InternshipBase):
@@ -493,6 +525,7 @@ class InternshipDecisionRequest(BaseModel):
 
 
 class ProgressReportCreateRequest(BaseModel):
+    report_number: int = Field(..., ge=1, le=10)
     summary: Optional[str] = Field(None, max_length=2000)
 
 

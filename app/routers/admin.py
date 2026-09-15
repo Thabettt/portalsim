@@ -18,6 +18,7 @@ from app.schemas import (
     WebhookSettingCreate, WebhookSettingRead, WebhookSettingUpdate,
     WebhookLogRead, SystemStateResponse, SeedResponse,
     AttendanceMarkRequest, AttendanceBatchMarkRequest, AttendanceWarningBatchUpdateRequest, InternshipDecisionRequest,
+    InternshipRevisionDecisionRequest, InternshipFinalStatusRequest,
     ProgressReportCreateRequest, ProgressReportDecisionRequest,
     AssessmentPublishRequest, PaginatedResponse
 )
@@ -31,7 +32,7 @@ from app.services.payments import (
 )
 from app.services.grades_internships import (
     publish_assessment_grade, simulate_deadline_check,
-    update_internship_status, get_student_grades_summary
+    update_internship_status, update_internship_revision_review, update_internship_final_status, get_student_grades_summary
 )
 from app.services.webhook_sender import deliver_webhook, get_webhook_logs
 from app.services.n8n_attendance import (
@@ -39,10 +40,16 @@ from app.services.n8n_attendance import (
     AttendanceFinalizationNotConfigured,
     send_attendance_snapshot,
 )
+from app.services.internship_admin import build_internship_admin_record, sort_internship_records
 from app.services.internship_progress import (
     create_progress_report,
     list_approved_internships,
+    list_all_internships,
+    list_internship_progress_reports,
     list_pending_progress_reports,
+    trigger_progress_report_accept_automation,
+    trigger_progress_report_reject_automation,
+    trigger_progress_report_submit_automation,
     update_progress_report_status,
 )
 # from app.config import get_settings as get_app_config  # Not used directly
@@ -293,6 +300,70 @@ async def decide_internship(
     internship, webhook_log = result
     if webhook_log:
         await deliver_webhook(session, webhook_log)
+
+    if request.status == InternshipStatus.REJECTED:
+        student = session.get(User, internship.student_id)
+        if student:
+            webhook_url = settings.n8n_internship_rejected_webhook_url.strip()
+            payload = {
+                "new_status": "rejected",
+                "student_email": student.email,
+                "internship_title": internship.position,
+            }
+            logger.info(f"[Internship Rejection Notification] Sending payload to {webhook_url}: {payload}")
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    res = await client.post(webhook_url, json=payload)
+                    logger.info(f"[Internship Rejection Notification] Response [{res.status_code}]: {res.text}")
+            except Exception as exc:
+                logger.error(f"[Internship Rejection Notification] Failed to send webhook to {webhook_url}: {exc}")
+
+    return internship
+
+
+@router.post("/internships/revision-review/{review_type}")
+async def decide_internship_revision_review(
+    review_type: str,
+    request: InternshipRevisionDecisionRequest,
+    session: Session = Depends(get_session),
+):
+    """Update internship revision review status for the career center or supervisor."""
+    try:
+        internship = await update_internship_revision_review(
+            session=session,
+            student_email=request.student_email,
+            internship_title=request.internship_title,
+            review_type=review_type,
+            new_status=request.new_status,
+            reason=request.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    if not internship:
+        raise HTTPException(404, "Internship not found")
+
+    status_field = "career_center_review_status" if review_type == "career_center" else "supervisor_review_status"
+    return {
+        "status": getattr(internship, status_field),
+        "internship": internship,
+    }
+
+
+@router.post("/internships/{internship_id}/final-status", response_model=InternshipRead)
+async def fulfill_internship_final_status(
+    internship_id: int,
+    request: InternshipFinalStatusRequest,
+    session: Session = Depends(get_session),
+):
+    """Mark an internship as fulfilled from the academic or career center perspective."""
+    try:
+        internship = await update_internship_final_status(session, internship_id, request.review_type)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not internship:
+        raise HTTPException(404, "Internship not found")
     return internship
 
 
@@ -302,20 +373,39 @@ async def get_approved_internships(session: Session = Depends(get_session)):
     return list_approved_internships(session)
 
 
+@router.get("/internships/all")
+async def get_all_internships(session: Session = Depends(get_session)):
+    """List all internships for all students regardless of status."""
+    return list_all_internships(session)
+
+
 @router.post("/internships/{internship_id}/progress-reports")
 async def submit_progress_report(
     internship_id: int,
     request: ProgressReportCreateRequest,
     session: Session = Depends(get_session),
 ):
-    """Create the next numbered bi-weekly report for an approved internship."""
+    logger.info(f"Incoming progress report submit request: {internship_id} - {request}")
+    """Create a numbered bi-weekly report for an approved internship."""
     try:
-        report = create_progress_report(session, internship_id, request.summary)
+        report = create_progress_report(session, internship_id, request.report_number, request.summary)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     if not report:
         raise HTTPException(404, "Internship not found")
+        
+    await trigger_progress_report_submit_automation(report)
+    
     return report
+
+
+@router.get("/internships/{internship_id}/progress-reports")
+async def get_internship_progress_reports(
+    internship_id: int,
+    session: Session = Depends(get_session),
+):
+    """List all submitted progress reports for an internship."""
+    return list_internship_progress_reports(session, internship_id)
 
 
 @router.get("/internship-progress-reports/pending")
@@ -330,6 +420,7 @@ async def decide_progress_report(
     request: ProgressReportDecisionRequest,
     session: Session = Depends(get_session),
 ):
+    logger.info(f"Incoming progress report decision request: {report_id} - {request}")
     """Approve or reject a bi-weekly report and queue its webhook event."""
     try:
         result = update_progress_report_status(
@@ -344,6 +435,15 @@ async def decide_progress_report(
         raise HTTPException(404, "Progress report not found")
     report, webhook_log = result
     await deliver_webhook(session, webhook_log)
+
+    if request.status == ProgressReportStatus.REJECTED:
+        report_obj = session.get(InternshipProgressReport, report_id)
+        if report_obj:
+            internship = session.get(Internship, report_obj.internship_id)
+            student = session.get(User, internship.student_id) if internship else None
+            if report_obj and internship and student:
+                await trigger_progress_report_reject_automation(session, report_obj, internship, student)
+
     return report
 
 
@@ -671,12 +771,16 @@ async def list_pending_internships(session: Session = Depends(get_session)):
     
     result = []
     for internship, user in internships:
-        i_dict = internship.model_dump()
-        i_dict["student_name"] = user.full_name
-        i_dict["student_string_id"] = user.student_id
-        result.append(i_dict)
-        
-    return result
+        report_count = session.exec(
+            select(func.count(InternshipProgressReport.id))
+            .where(InternshipProgressReport.internship_id == internship.id)
+        ).one()
+        record = build_internship_admin_record(internship, user, report_count=report_count)
+        record["proof_of_acceptance_uploaded_at"] = internship.proof_of_acceptance_uploaded_at.isoformat() if internship.proof_of_acceptance_uploaded_at else None
+        record["evaluation_form_uploaded_at"] = internship.evaluation_form_uploaded_at.isoformat() if internship.evaluation_form_uploaded_at else None
+        result.append(record)
+
+    return sort_internship_records(result)
 
 
 @router.post("/attendance/finalize-day")
@@ -688,3 +792,23 @@ async def finalize_attendance_day(session: Session = Depends(get_session)):
         raise HTTPException(503, str(exc)) from exc
     except AttendanceFinalizationError as exc:
         raise HTTPException(502, str(exc)) from exc
+
+
+@router.get("/students/warning-status")
+async def get_student_warning_status(student_id: str = Query(..., description="Student ID to look up")):
+    """Proxy a student warning status lookup to the configured n8n webhook."""
+    import httpx
+    from app.config import get_settings
+    settings = get_settings()
+    url = settings.n8n_warning_status_url.strip()
+    if not url:
+        raise HTTPException(503, "Warning status webhook is not configured (N8N_WARNING_STATUS_URL).")
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(url, params={"student_id": student_id})
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(exc.response.status_code, f"n8n returned an error: {exc.response.text}") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(502, f"Could not reach warning status service: {exc}") from exc

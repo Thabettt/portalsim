@@ -88,7 +88,7 @@ export default function Payments() {
       <Card className="flex flex-col overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-border">
-            <thead className="bg-muted/50">
+            <thead className="bg-muted dark:bg-muted/50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Student</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Type</th>
@@ -111,7 +111,7 @@ export default function Payments() {
                 </tr>
               ) : (
                 payments.map((payment) => (
-                  <tr key={payment.id} className="hover:bg-muted/50 transition-colors">
+                  <tr key={payment.id} className="hover:bg-muted dark:bg-muted/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Link to={`/students/${payment.student_id}`} className="block group">
                         <div className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">{payment.student_name || `Student ${payment.student_id}`}</div>

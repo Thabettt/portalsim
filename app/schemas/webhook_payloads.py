@@ -138,7 +138,7 @@ EXAMPLE_PAYLOADS = {
         "event_id": "550e8400-e29b-41d4-a716-446655440001",
         "event_type": "internship_status_update",
         "timestamp": "2026-07-18T10:00:00Z",
-        "student_email": "ahmed.hassan@example.com",
+        "student_email": "alialnaggar.h@gmail.com",
         "internship_title": "Software Engineering Intern",
         "new_status": "approved"
     },

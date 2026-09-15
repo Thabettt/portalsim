@@ -1,5 +1,5 @@
 // In production, the frontend is served from the same origin as the API.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? "" : "http://localhost:8000");
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? "" : "http://localhost:6767");
 
 async function fetchApi(endpoint, options = {}) {
   const urlObj = new URL(`${API_BASE_URL}${endpoint}`, window.location.origin);
@@ -122,11 +122,19 @@ export async function getApprovedInternships() {
   return fetchApi("/admin/internships/approved");
 }
 
+export async function getAllInternships() {
+  return fetchApi("/admin/internships/all");
+}
+
 export async function submitInternshipProgressReport(internshipId, payload) {
   return fetchApi(`/admin/internships/${internshipId}/progress-reports`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function getInternshipProgressReports(internshipId) {
+  return fetchApi(`/admin/internships/${internshipId}/progress-reports`);
 }
 
 export async function getPendingProgressReports() {
@@ -135,6 +143,20 @@ export async function getPendingProgressReports() {
 
 export async function makeProgressReportDecision(reportId, payload) {
   return fetchApi(`/admin/internship-progress-reports/${reportId}/decision`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateInternshipRevisionReview(reviewType, payload) {
+  return fetchApi(`/admin/internships/revision-review/${reviewType}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateInternshipFinalStatus(internshipId, payload) {
+  return fetchApi(`/admin/internships/${internshipId}/final-status`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -186,6 +208,11 @@ export async function retryWebhookLog(logId) {
 
 export async function getWebhookLogStats() {
   return fetchApi("/admin/webhook-logs/stats");
+}
+
+// ==== N8N WEBHOOKS ====
+export async function getStudentWarningStatus(studentId) {
+  return fetchApi(`/admin/students/warning-status?student_id=${encodeURIComponent(studentId)}`);
 }
 
 // ==== SETTINGS ====

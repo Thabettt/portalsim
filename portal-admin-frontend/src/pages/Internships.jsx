@@ -1,27 +1,33 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  getAllInternships,
   getApprovedInternships,
   getPendingInternships,
   getPendingProgressReports,
+  getInternshipProgressReports,
+  updateInternshipFinalStatus,
   makeInternshipDecision,
   makeProgressReportDecision,
-  submitInternshipProgressReport,
+  updateInternshipRevisionReview,
 } from '../api';
 import { useToast } from '../hooks/useToast';
 import { Button } from '../components/ui/Button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
+import { Card, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Skeleton } from '../components/ui/Skeleton';
-import { Select } from '../components/ui/Select';
 import { EmptyState } from '../components/ui/EmptyState';
 import {
   Briefcase,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   ClipboardCheck,
   Clock3,
-  FileText,
+  FileCheck2,
   Send,
+  ShieldCheck,
+  UserRound,
 } from 'lucide-react';
 
 const decisionButtonClasses = {
@@ -29,60 +35,71 @@ const decisionButtonClasses = {
   rejected: 'text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 border-red-200 dark:border-red-900/50',
 };
 
-function StudentIdentity({ item }) {
-  return (
-    <Link to={`/students/${item.student_id}`} className="block group">
-      <div className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-        {item.student_name || `Student ${item.student_id}`}
-      </div>
-      <div className="text-xs text-muted-foreground">
-        {item.student_string_id || item.student_email || ''}
-      </div>
-    </Link>
-  );
-}
-
+import { formatISODate, formatDateTime, getStatusMeta, normalizeInternshipRecord, studentRecordMatchesReport, normalizeReport } from '../lib/internshipUtils';
+import { SectionBlock, DetailItem, StudentIdentity } from '../components/InternshipShared';
 export default function Internships() {
   const { addToast } = useToast();
   const [loading, setLoading] = useState(true);
+  const [allInternships, setAllInternships] = useState([]);
   const [pendingInternships, setPendingInternships] = useState([]);
   const [approvedInternships, setApprovedInternships] = useState([]);
   const [pendingReports, setPendingReports] = useState([]);
+  const [expandedRecordId, setExpandedRecordId] = useState('');
+  const [pageError, setPageError] = useState('');
 
   const [activeInternshipDecision, setActiveInternshipDecision] = useState(null);
   const [internshipDecisionNotes, setInternshipDecisionNotes] = useState('');
   const [submittingInternshipDecision, setSubmittingInternshipDecision] = useState(false);
 
-  const [selectedInternshipId, setSelectedInternshipId] = useState('');
-  const [reportSummary, setReportSummary] = useState('');
-  const [submittingReport, setSubmittingReport] = useState(false);
+  const [reportDrafts, setReportDrafts] = useState({});
+  const [submittingReportId, setSubmittingReportId] = useState(null);
+  const [reportsByInternship, setReportsByInternship] = useState({});
+  const [loadingReportsByInternship, setLoadingReportsByInternship] = useState({});
+  const [reportErrorsByInternship, setReportErrorsByInternship] = useState({});
+  const [reportsExpandedByInternship, setReportsExpandedByInternship] = useState({});
+  const [reportReviewDrafts, setReportReviewDrafts] = useState({});
+  const [reportReviewAction, setReportReviewAction] = useState(null);
+  const [reportReviewError, setReportReviewError] = useState('');
 
-  const [activeReportDecision, setActiveReportDecision] = useState(null);
-  const [reportDecisionNotes, setReportDecisionNotes] = useState('');
-  const [submittingReportDecision, setSubmittingReportDecision] = useState(false);
+  const [revisionReasonDrafts, setRevisionReasonDrafts] = useState({});
+  const [revisionActionState, setRevisionActionState] = useState(null);
+  const [revisionError, setRevisionError] = useState('');
+
+  const [finalStatusAction, setFinalStatusAction] = useState(null);
+  const [finalStatusError, setFinalStatusError] = useState('');
 
   const loadData = useCallback(async (background = false) => {
     try {
+      setPageError('');
       if (!background) setLoading(true);
-      const [internshipQueue, eligible, reportQueue] = await Promise.all([
+      const [allRes, internshipQueue, eligible, reportQueue] = await Promise.all([
+        getAllInternships(),
         getPendingInternships(1, 50),
         getApprovedInternships(),
         getPendingProgressReports(),
       ]);
 
+      const allItems = Array.isArray(allRes) ? allRes : (allRes?.internships || []);
       const pendingItems = Array.isArray(internshipQueue)
         ? internshipQueue
         : internshipQueue?.items || [];
 
       const eligibleItems = Array.isArray(eligible) ? eligible : [];
+      setAllInternships(allItems);
       setPendingInternships(pendingItems);
       setApprovedInternships(eligibleItems);
       setPendingReports(Array.isArray(reportQueue) ? reportQueue : []);
-      setSelectedInternshipId(current => {
-        if (eligibleItems.some(item => String(item.id) === current)) return current;
-        return eligibleItems.length ? String(eligibleItems[0].id) : '';
+      setExpandedRecordId(current => {
+        const fallbackId = allItems[0]?.id ?? eligibleItems[0]?.id ?? pendingItems[0]?.id;
+        if (!fallbackId) return '';
+        const combined = [...allItems, ...pendingItems, ...eligibleItems];
+        if (current && combined.some(item => String(item.id) === String(current))) {
+          return current;
+        }
+        return String(fallbackId);
       });
     } catch (err) {
+      setPageError(err.message);
       addToast(err.message, 'error');
     } finally {
       if (!background) setLoading(false);
@@ -106,9 +123,20 @@ export default function Internships() {
           : null,
       });
       addToast(`Internship ${activeInternshipDecision.status} successfully`);
+      
+      const targetId = activeInternshipDecision.id;
+      const targetStatus = activeInternshipDecision.status;
+      
+      setPendingInternships(current => {
+        const record = current.find(r => r.id === targetId);
+        if (record && targetStatus === 'approved') {
+          setApprovedInternships(prev => [{...record, status: 'approved'}, ...prev]);
+        }
+        return current.filter(r => r.id !== targetId);
+      });
+      
       setActiveInternshipDecision(null);
       setInternshipDecisionNotes('');
-      await loadData(true);
     } catch (err) {
       addToast(err.message, 'error');
     } finally {
@@ -116,58 +144,213 @@ export default function Internships() {
     }
   };
 
-  const handleReportSubmit = async (event) => {
-    event.preventDefault();
-    if (!selectedInternshipId) {
-      addToast('Select an approved internship first.', 'error');
-      return;
-    }
 
+  const loadInternshipReports = async (internshipId) => {
     try {
-      setSubmittingReport(true);
-      const report = await submitInternshipProgressReport(Number(selectedInternshipId), {
-        summary: reportSummary.trim() || null,
-      });
-      addToast(`Bi-weekly report #${report.report_number} sent for review`);
-      setReportSummary('');
-      await loadData(true);
+      setLoadingReportsByInternship(current => ({ ...current, [internshipId]: true }));
+      setReportErrorsByInternship(current => ({ ...current, [internshipId]: '' }));
+      const reports = await getInternshipProgressReports(internshipId);
+      setReportsByInternship(current => ({ ...current, [internshipId]: Array.isArray(reports) ? reports : [] }));
     } catch (err) {
+      setReportErrorsByInternship(current => ({ ...current, [internshipId]: err.message }));
       addToast(err.message, 'error');
     } finally {
-      setSubmittingReport(false);
+      setLoadingReportsByInternship(current => ({ ...current, [internshipId]: false }));
     }
   };
 
-  const handleReportDecision = async (event) => {
-    event.preventDefault();
-    if (!activeReportDecision) return;
-
+  const handleReportReview = async (internshipId, report, status) => {
+    const feedbackKey = `${internshipId}-${report.id}`;
+    const reviewNotes = reportReviewDrafts[feedbackKey] || '';
+    setReportReviewAction({ internshipId, reportId: report.id, status });
+    setReportReviewError('');
     try {
-      setSubmittingReportDecision(true);
-      await makeProgressReportDecision(activeReportDecision.id, {
-        status: activeReportDecision.status,
-        review_notes: reportDecisionNotes.trim() || null,
+      const updatedReport = await makeProgressReportDecision(report.id, {
+        status: status,
+        review_notes: reviewNotes,
       });
-      addToast(`Progress report ${activeReportDecision.status} successfully`);
-      setActiveReportDecision(null);
-      setReportDecisionNotes('');
-      await loadData(true);
+
+      setReportsByInternship(prev => {
+        const list = prev[internshipId] || [];
+        return {
+          ...prev,
+          [internshipId]: list.map(r => r.id === updatedReport.id ? updatedReport : r)
+        };
+      });
+      
+      const updateFn = prevRecords => prevRecords.map(record => {
+        if (record.id === internshipId) {
+          const currentReports = record.reports || [];
+          const oldStatus = report.status;
+          
+          let waiting_delta = 0;
+          let accepted_delta = 0;
+          let rejected_delta = 0;
+          
+          if (oldStatus === 'pending') waiting_delta--;
+          else if (oldStatus === 'approved') accepted_delta--;
+          else if (oldStatus === 'rejected') rejected_delta--;
+          
+          if (status === 'approved') accepted_delta++;
+          else if (status === 'rejected') rejected_delta++;
+          else if (status === 'pending') waiting_delta++;
+
+          return {
+            ...record,
+            reports: currentReports.map(r => r.id === updatedReport.id ? updatedReport : r),
+            reportSummary: {
+              ...(record.reportSummary || { total_reports: 0, waiting_for_review: 0, accepted: 0, rejected: 0 }),
+              waiting_for_review: (record.reportSummary?.waiting_for_review || 0) + waiting_delta,
+              accepted: (record.reportSummary?.accepted || 0) + accepted_delta,
+              rejected: (record.reportSummary?.rejected || 0) + rejected_delta,
+            }
+          };
+        }
+        return record;
+      });
+      setPendingInternships(updateFn);
+      setApprovedInternships(updateFn);
+      setAllInternships(updateFn);
+
+      setReportReviewDrafts(current => {
+        const next = { ...current };
+        delete next[feedbackKey];
+        return next;
+      });
     } catch (err) {
-      addToast(err.message, 'error');
+      setReportReviewError(err.message || 'An error occurred while reviewing the report.');
     } finally {
-      setSubmittingReportDecision(false);
+      setReportReviewAction(null);
     }
   };
+
+  const handleRevisionDecision = async (reviewType, record, newStatus) => {
+    const draftKey = `${record.id}-${reviewType}`;
+
+    try {
+      setRevisionActionState({ reviewType, recordId: record.id, status: newStatus });
+      setRevisionError('');
+      const response = await updateInternshipRevisionReview(reviewType, {
+        student_email: record.studentEmail,
+        internship_title: record.position,
+        new_status: newStatus,
+        reason: revisionReasonDrafts[draftKey] || null,
+      });
+      const updatedStatus = response?.status || newStatus;
+      const updateFn = current => current.map(item => {
+        if (String(item.id) !== String(record.id)) return item;
+        if (reviewType === 'career_center') {
+          return {
+            ...item,
+            careerCenterReviewStatus: updatedStatus,
+            careerCenterReviewReason: revisionReasonDrafts[draftKey] || item.careerCenterReviewReason,
+          };
+        } else if (reviewType === 'supervisor') {
+          return {
+            ...item,
+            supervisorReviewStatus: updatedStatus,
+            supervisorReviewReason: revisionReasonDrafts[draftKey] || item.supervisorReviewReason,
+          };
+        }
+        return item;
+      });
+      
+      setPendingInternships(updateFn);
+      setApprovedInternships(updateFn);
+      setAllInternships(updateFn);
+      
+      setRevisionReasonDrafts(current => ({ ...current, [draftKey]: '' }));
+      addToast(`Revision review ${updatedStatus} successfully`);
+    } catch (err) {
+      setRevisionError(err.message);
+      addToast(err.message, 'error');
+    } finally {
+      setRevisionActionState(null);
+    }
+  };
+
+  const handleFinalStatus = async (record, reviewType) => {
+    try {
+      setFinalStatusAction({ internshipId: record.id, reviewType });
+      setFinalStatusError('');
+      const updatedInternship = await updateInternshipFinalStatus(record.id, { review_type: reviewType });
+      const updateFn = current => current.map(item => (
+        String(item.id) === String(record.id)
+          ? {
+              ...item,
+              academicFinalStatus: updatedInternship?.academic_final_status || item.academicFinalStatus,
+              careerCenterFinalStatus: updatedInternship?.career_center_final_status || item.careerCenterFinalStatus,
+            }
+          : item
+      ));
+      setPendingInternships(updateFn);
+      setApprovedInternships(updateFn);
+      setAllInternships(updateFn);
+      addToast('Internship marked as fulfilled');
+    } catch (err) {
+      setFinalStatusError(err.message);
+      addToast(err.message, 'error');
+    } finally {
+      setFinalStatusAction(null);
+    }
+  };
+
+  const internshipCards = useMemo(() => {
+    const merged = new Map();
+
+    const addRecord = (item, source) => {
+      const normalized = normalizeInternshipRecord(item, source);
+      const existing = merged.get(String(normalized.id));
+      merged.set(String(normalized.id), {
+        ...(existing || {}),
+        ...normalized,
+      });
+    };
+
+    allInternships.forEach(item => addRecord(item, item.status));
+    pendingInternships.forEach(item => addRecord(item, 'pending'));
+    approvedInternships.forEach(item => addRecord(item, 'approved'));
+
+    const records = [...merged.values()];
+    records.forEach(record => {
+      const loadedReports = reportsByInternship[record.id] || [];
+      const fallbackReports = pendingReports.filter(report => studentRecordMatchesReport(record, report));
+      const realReports = loadedReports.length > 0 ? loadedReports : fallbackReports;
+      record.reports = realReports.map((report, index) => normalizeReport(report, record, index));
+    });
+
+    return records.sort((left, right) => String(left.studentStringId || left.studentId || '').localeCompare(String(right.studentStringId || right.studentId || ''), undefined, { numeric: true, sensitivity: 'base' }));
+  }, [allInternships, approvedInternships, pendingInternships, pendingReports, reportsByInternship]);
+
+  useEffect(() => {
+    internshipCards.forEach(record => {
+      if (!reportsByInternship[record.id] && !loadingReportsByInternship[record.id]) {
+        loadInternshipReports(record.id);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [internshipCards]);
 
   if (loading) {
     return (
       <div className="space-y-8 animate-fade-in-up">
         <Skeleton className="h-10 w-64" />
-        {Array(3).fill(0).map((_, index) => (
+        <div className="grid gap-4 sm:grid-cols-3">
+          {Array(3).fill(0).map((_, index) => (
+            <Card key={index}>
+              <div className="p-5 space-y-3">
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-4 w-56" />
+              </div>
+            </Card>
+          ))}
+        </div>
+        {Array(2).fill(0).map((_, index) => (
           <Card key={index}>
-            <div className="p-6 space-y-4">
-              <Skeleton className="h-6 w-56" />
-              <Skeleton className="h-24 w-full" />
+            <div className="p-5 space-y-4">
+              <Skeleton className="h-7 w-72" />
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-5/6" />
             </div>
           </Card>
         ))}
@@ -175,16 +358,12 @@ export default function Internships() {
     );
   }
 
-  const selectedInternship = approvedInternships.find(
-    item => String(item.id) === selectedInternshipId,
-  );
-
   return (
     <div className="space-y-8 animate-fade-in-up">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Internship Management</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Approve internships, submit bi-weekly progress reports, and review each report.
+          Review internship records, verify documents, submit bi-weekly reports, and handle approvals.
         </p>
       </div>
 
@@ -209,160 +388,386 @@ export default function Internships() {
         </Card>
       </div>
 
-      <Card className="flex flex-col overflow-hidden">
-        <CardHeader>
-          <CardTitle>1. Pending Internship Applications</CardTitle>
-          <CardDescription>Approving an application immediately makes it available in the report submission section.</CardDescription>
-        </CardHeader>
-        <div className="overflow-x-auto border-t">
-          <table className="min-w-full divide-y divide-border">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Student</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Company</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Internship Title</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dates</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border bg-card">
-              {pendingInternships.length === 0 ? (
-                <tr><td colSpan="5" className="p-0"><EmptyState icon={Briefcase} title="No Pending Applications" description="All internship applications have been processed." className="my-10" /></td></tr>
-              ) : pendingInternships.map(internship => (
-                <React.Fragment key={internship.id}>
-                  <tr className="hover:bg-muted/50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap"><StudentIdentity item={internship} /></td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{internship.company_name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">{internship.position}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">{internship.start_date} to {internship.end_date}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {activeInternshipDecision?.id === internship.id ? (
-                        <Button variant="ghost" size="sm" onClick={() => { setActiveInternshipDecision(null); setInternshipDecisionNotes(''); }}>Cancel</Button>
-                      ) : (
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" className={decisionButtonClasses.approved} onClick={() => setActiveInternshipDecision({ id: internship.id, status: 'approved' })}>Approve</Button>
-                          <Button variant="outline" size="sm" className={decisionButtonClasses.rejected} onClick={() => setActiveInternshipDecision({ id: internship.id, status: 'rejected' })}>Reject</Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                  {activeInternshipDecision?.id === internship.id && (
-                    <tr className="bg-muted/20">
-                      <td colSpan="5" className="px-6 py-4">
-                        <form onSubmit={handleInternshipDecision} className="ml-auto flex max-w-2xl flex-col gap-4 rounded-md border bg-card p-4 shadow-sm sm:flex-row sm:items-end">
-                          <div className="flex-1">
-                            <label className="mb-1.5 block text-xs font-medium">
-                              {activeInternshipDecision.status === 'rejected' ? 'Rejection reason' : 'Approval note (optional)'}
-                            </label>
-                            <textarea value={internshipDecisionNotes} onChange={event => setInternshipDecisionNotes(event.target.value)} required={activeInternshipDecision.status === 'rejected'} className="flex min-h-[76px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder={activeInternshipDecision.status === 'rejected' ? 'Explain why the internship is rejected...' : 'Optional internal note...'} />
-                          </div>
-                          <Button type="submit" variant={activeInternshipDecision.status === 'approved' ? 'default' : 'destructive'} isLoading={submittingInternshipDecision}>Confirm {activeInternshipDecision.status === 'approved' ? 'Approval' : 'Rejection'}</Button>
-                        </form>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      {pageError ? (
+        <Card className="border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900/50 dark:bg-red-950/30">
+          <CardContent className="p-4">
+            <p className="text-sm font-medium text-red-700 dark:text-red-200">Unable to load internship data.</p>
+            <p className="mt-1 text-sm text-red-600 dark:text-red-200/80">{pageError}</p>
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>2. Send Bi-Weekly Report</CardTitle>
-          <CardDescription>Select a student with an approved internship. The report number is assigned automatically; no PDF upload is required.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {approvedInternships.length === 0 ? (
-            <EmptyState icon={FileText} title="No Approved Internships" description="Approve an internship application to make the student eligible for progress reports." className="my-8" />
-          ) : (
-            <form onSubmit={handleReportSubmit} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
-              <div>
-                <label className="mb-2 block text-sm font-medium">Student and internship</label>
-                <Select value={selectedInternshipId} onChange={event => setSelectedInternshipId(event.target.value)}>
-                  {approvedInternships.map(internship => (
-                    <option key={internship.id} value={internship.id}>
-                      {internship.student_name} — {internship.position} at {internship.company_name}
-                    </option>
-                  ))}
-                </Select>
-                {selectedInternship && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    This will create progress report #{selectedInternship.next_progress_report_number} for {selectedInternship.student_email}.
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium">Short progress summary (optional)</label>
-                <textarea value={reportSummary} onChange={event => setReportSummary(event.target.value)} maxLength={2000} className="flex min-h-[90px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder="What was completed during this two-week period?" />
-              </div>
-              <Button type="submit" isLoading={submittingReport} className="gap-2"><Send className="h-4 w-4" />Send Report</Button>
-            </form>
-          )}
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        {internshipCards.length === 0 ? (
+          <Card className="p-6">
+            <EmptyState
+              icon={Briefcase}
+              title="No Internship Records"
+              description="Internship records will appear here once the simulator loads applications."
+              className="my-8"
+            />
+          </Card>
+        ) : internshipCards.map((record, index) => {
+          const isExpanded = String(expandedRecordId) === String(record.id);
+          const statusMeta = getStatusMeta(record.status);
+          const displayName = record.studentDisplayName || record.studentName || `Student ${record.studentId}`;
+          return (
+            <Card key={record.id} className="overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setExpandedRecordId(current => String(current) === String(record.id) ? '' : String(record.id))}
+                className="flex w-full items-center justify-between gap-4 border-b border-border dark:border-border dark:border-border/70 bg-muted dark:bg-muted dark:bg-muted/30 px-5 py-4 text-left transition-colors hover:bg-muted dark:hover:bg-muted dark:bg-muted/50"
+                aria-expanded={isExpanded}
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-base font-semibold text-foreground">{displayName}</h2>
+                    <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                    <Badge variant="secondary">Record #{index + 1}</Badge>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                    <span>{record.studentStringId}</span>
+                    <span className="hidden sm:inline">-</span>
+                    <span>{record.companyName}</span>
+                    <span className="hidden sm:inline">-</span>
+                    <span>{record.position}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="hidden text-right sm:block">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Documents</div>
+                    <div className="text-sm font-medium">{record.proofOfAcceptanceUploadedAt || record.evaluationFormUploadedAt ? 2 : 0}</div>
+                  </div>
+                  {isExpanded ? <ChevronDown className="h-5 w-5 text-muted-foreground" /> : <ChevronRight className="h-5 w-5 text-muted-foreground" />}
+                </div>
+              </button>
 
-      <Card className="flex flex-col overflow-hidden">
-        <CardHeader>
-          <CardTitle>3. Review Bi-Weekly Reports</CardTitle>
-          <CardDescription>Approve or reject submitted reports. Each decision creates a webhook-ready progress report status event.</CardDescription>
-        </CardHeader>
-        <div className="overflow-x-auto border-t">
-          <table className="min-w-full divide-y divide-border">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Report</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Student</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Internship</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Summary</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Submitted</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border bg-card">
-              {pendingReports.length === 0 ? (
-                <tr><td colSpan="6" className="p-0"><EmptyState icon={ClipboardCheck} title="No Reports Awaiting Review" description="Submitted bi-weekly reports will appear here." className="my-10" /></td></tr>
-              ) : pendingReports.map(report => (
-                <React.Fragment key={report.id}>
-                  <tr className="hover:bg-muted/50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap"><Badge variant="secondary">Report #{report.report_number}</Badge></td>
-                    <td className="px-6 py-4 whitespace-nowrap"><StudentIdentity item={report} /></td>
-                    <td className="px-6 py-4"><div className="text-sm font-medium">{report.internship_title}</div><div className="text-xs text-muted-foreground">{report.company_name}</div></td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground max-w-sm"><p className="line-clamp-2">{report.summary || 'No summary provided.'}</p></td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">{new Date(report.submitted_at).toLocaleString()}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {activeReportDecision?.id === report.id ? (
-                        <Button variant="ghost" size="sm" onClick={() => { setActiveReportDecision(null); setReportDecisionNotes(''); }}>Cancel</Button>
-                      ) : (
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" className={decisionButtonClasses.approved} onClick={() => setActiveReportDecision({ id: report.id, status: 'approved' })}>Approve</Button>
-                          <Button variant="outline" size="sm" className={decisionButtonClasses.rejected} onClick={() => setActiveReportDecision({ id: report.id, status: 'rejected' })}>Reject</Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                  {activeReportDecision?.id === report.id && (
-                    <tr className="bg-muted/20">
-                      <td colSpan="6" className="px-6 py-4">
-                        <form onSubmit={handleReportDecision} className="ml-auto flex max-w-2xl flex-col gap-4 rounded-md border bg-card p-4 shadow-sm sm:flex-row sm:items-end">
-                          <div className="flex-1">
-                            <label className="mb-1.5 block text-xs font-medium">
-                              {activeReportDecision.status === 'rejected' ? 'Rejection reason' : 'Review note (optional)'}
-                            </label>
-                            <textarea value={reportDecisionNotes} onChange={event => setReportDecisionNotes(event.target.value)} required={activeReportDecision.status === 'rejected'} maxLength={1000} className="flex min-h-[76px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder={activeReportDecision.status === 'rejected' ? 'Explain what needs to be corrected...' : 'Optional review note...'} />
+              {isExpanded && (
+                <CardContent className="space-y-4 pt-5">
+                  <SectionBlock
+                    title="Student Information"
+                    description="Identity and academic context for the internship record."
+                    icon={UserRound}
+                  >
+                    <div className="space-y-3">
+                      <DetailItem label="Student Name" value={record.studentDisplayName || record.studentName} />
+                      <DetailItem label="Student E-mail" value={record.studentEmail ? record.studentEmail.replace(/\+[^@]+/, '') : ''} />
+                      <DetailItem 
+                        label="Supervised By" 
+                        value={record.academicSupervisorId ? `(${record.academicSupervisorId}) ${record.academicSupervisorName || record.supervisorName}` : record.academicSupervisorName || record.supervisorName} 
+                      />
+                      <DetailItem label="Country" value={record.country} />
+                      <DetailItem label="Faculty" value={record.faculty} />
+                      <DetailItem label="First Major" value={record.firstMajor} />
+                      <DetailItem label="Second Major" value={record.secondMajor || 'Not available'} />
+                    </div>
+                  </SectionBlock>
+
+                  <SectionBlock
+                    title="Internship Information"
+                    description="Placement details, schedule, and host organization."
+                    icon={Briefcase}
+                  >
+                    <div className="space-y-3">
+                      <DetailItem label="Organization" value={record.companyName} />
+                      <DetailItem label="Duration" value={record.startDate && record.endDate ? `From ${formatISODate(record.startDate)} To ${formatISODate(record.endDate)}` : 'Not available'} />
+                      <DetailItem label="Entry Date" value={formatDateTime(record.entryDate)} />
+                      <DetailItem label="Source of Internship" value={record.sourceOfInternship} />
+                      <DetailItem label="Workplace" value={record.workplace} />
+                      <DetailItem label="Training" value={record.position} />
+                      <DetailItem label="Department(s)" value={record.departments || 'Not available'} />
+                      <DetailItem label="Days per Week" value={record.daysPerWeek} />
+                      <DetailItem label="Hours per Day" value={record.hoursPerDay} />
+                      <DetailItem label="Job Description" value={record.jobDescription} />
+                    </div>
+                  </SectionBlock>
+
+                  <SectionBlock
+                    title="Organizational Supervisor Information"
+                    description="Primary contact at the host organization."
+                    icon={ShieldCheck}
+                  >
+                    <div className="space-y-3">
+                      <DetailItem label="Name" value={record.supervisorName} />
+                      <DetailItem label="Job Title" value={record.supervisorTitle} />
+                      <DetailItem label="Mobile" value={record.supervisorPhone} />
+                      <DetailItem label="E-mail" value={record.supervisorEmail ? record.supervisorEmail.replace(/\+[^@]+/, '') : ''} />
+                    </div>
+                  </SectionBlock>
+
+                  <SectionBlock
+                    title="Internship Revision Status"
+                    description="Revision progress and the latest review feedback."
+                    icon={FileCheck2}
+                  >
+                    <div className="space-y-4">
+                      {[
+                        { key: 'career_center', title: 'Career Center Review', status: record.careerCenterReviewStatus, reason: record.careerCenterReviewReason },
+                        { key: 'supervisor', title: 'Academic Supervisor Review', status: record.supervisorReviewStatus, reason: record.supervisorReviewReason },
+                      ].map(section => {
+                        const draftKey = `${record.id}-${section.key}`;
+                        const currentValue = revisionReasonDrafts[draftKey] ?? section.reason ?? '';
+                        const isBusy = revisionActionState?.recordId === record.id && revisionActionState?.reviewType === section.key;
+                        const isAccepted = section.status === 'accepted';
+                        const isRejected = section.status === 'rejected';
+
+                        return (
+                          <div key={section.key} className="rounded-xl border border-border dark:border-border dark:border-border/60 bg-muted dark:bg-muted dark:bg-muted/20 p-4">
+                            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                              <div className="space-y-2">
+                                <h4 className="text-sm font-semibold text-foreground">{section.title}</h4>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant={isAccepted ? 'success' : isRejected ? 'danger' : 'warning'}>
+                                    {isAccepted ? 'Accepted' : isRejected ? 'Rejected' : 'Pending'}
+                                  </Badge>
+                                  <Badge variant="secondary">Revision required</Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {isAccepted
+                                    ? 'This review has been accepted.'
+                                    : isRejected
+                                      ? 'This review has been rejected.'
+                                      : 'No decision has been submitted yet.'}
+                                </p>
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className={decisionButtonClasses.approved}
+                                  disabled={isBusy}
+                                  isLoading={isBusy && revisionActionState?.status === 'accepted'}
+                                  onClick={() => handleRevisionDecision(section.key, record, 'accepted')}
+                                >
+                                  Accept
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className={decisionButtonClasses.rejected}
+                                  disabled={isBusy}
+                                  isLoading={isBusy && revisionActionState?.status === 'rejected'}
+                                  onClick={() => handleRevisionDecision(section.key, record, 'rejected')}
+                                >
+                                  Reject
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 space-y-3">
+                              <DetailItem label="Status" value={isAccepted ? 'Accepted' : isRejected ? 'Rejected' : 'Pending'} />
+                              <DetailItem label="Last Reason" value={currentValue || 'No reason recorded'} />
+                            </div>
+
+                            <div className="mt-4">
+                              <label className="mb-2 block text-xs font-medium text-muted-foreground">Reason</label>
+                              <textarea
+                                value={revisionReasonDrafts[draftKey] ?? ''}
+                                onChange={event => setRevisionReasonDrafts(current => ({ ...current, [draftKey]: event.target.value }))}
+                                className="flex min-h-[88px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                placeholder="Enter an optional review reason for this section..."
+                              />
+                            </div>
                           </div>
-                          <Button type="submit" variant={activeReportDecision.status === 'approved' ? 'default' : 'destructive'} isLoading={submittingReportDecision}>Confirm {activeReportDecision.status === 'approved' ? 'Approval' : 'Rejection'}</Button>
-                        </form>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                        );
+                      })}
+                      {revisionError ? (
+                        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
+                          {revisionError}
+                        </div>
+                      ) : null}
+                    </div>
+                  </SectionBlock>
+
+                  <SectionBlock
+                    title="Internship Uploaded Documents"
+                    description="Proof of acceptance and evaluation form uploads from the backend."
+                    icon={FileCheck2}
+                  >
+                    {record.proofOfAcceptanceUploadedAt || record.evaluationFormUploadedAt ? (
+                      <div className="space-y-3">
+                        <DetailItem
+                          label="Proof of Acceptance Upload Status"
+                          value={record.proofOfAcceptanceUploadedAt ? 'Yes' : 'No'}
+                        />
+                        <DetailItem
+                          label="Proof of Acceptance Upload Date"
+                          value={record.proofOfAcceptanceUploadedAt ? formatDateTime(record.proofOfAcceptanceUploadedAt) : 'Not uploaded'}
+                        />
+                        <DetailItem
+                          label="Evaluation Form Upload Status"
+                          value={record.evaluationFormUploadedAt ? 'Yes' : 'No'}
+                        />
+                        <DetailItem
+                          label="Evaluation Form Upload Date"
+                          value={record.evaluationFormUploadedAt ? formatDateTime(record.evaluationFormUploadedAt) : 'Not uploaded'}
+                        />
+                      </div>
+                    ) : (
+                      <EmptyState
+                        icon={FileCheck2}
+                        title="No document information exists"
+                        description="The backend has not provided proof of acceptance or evaluation form upload details for this record."
+                        className="my-4"
+                      />
+                    )}
+                  </SectionBlock>
+
+                  <SectionBlock
+                    title="Internship Reports"
+                    description="Submitted reports, review actions, and automation triggers."
+                    icon={ClipboardCheck}
+                  >
+                    <div className="space-y-2">
+                      <DetailItem label="Total Reports" value={record.reports?.length ?? 0} />
+                      <DetailItem label="Waiting for Review" value={record.reports?.filter(report => report.status === 'pending').length ?? 0} />
+                      <DetailItem label="Accepted" value={record.reports?.filter(report => report.status === 'approved').length ?? 0} />
+                      <DetailItem label="Rejected" value={record.reports?.filter(report => report.status === 'rejected').length ?? 0} />
+                    </div>
+
+                    <div className="mt-4 flex items-center gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          setReportsExpandedByInternship(current => ({ ...current, [record.id]: !current[record.id] }));
+                          if (!reportsByInternship[record.id]) {
+                            await loadInternshipReports(record.id);
+                          }
+                        }}
+                        isLoading={loadingReportsByInternship[record.id]}
+                      >
+                        {reportsExpandedByInternship[record.id] ? 'Hide Biweekly Reports' : 'Show Biweekly Reports'}
+                      </Button>
+                    </div>
+
+                    {!reportsExpandedByInternship[record.id] ? (
+                      <div className="mt-4 rounded-lg border border-dashed border-border dark:border-border dark:border-border/60 bg-muted dark:bg-muted dark:bg-muted/20 p-4 text-sm text-muted-foreground">
+                        Click â€œShow Biweekly Reportsâ€ to view the studentâ€™s reports.
+                      </div>
+                    ) : (reportsByInternship[record.id] || []).length === 0 ? (
+                      <EmptyState
+                        icon={ClipboardCheck}
+                        title="No reports found"
+                        description="This internship does not have any submitted biweekly reports yet."
+                        className="my-4"
+                      />
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        {(reportsByInternship[record.id] || []).map(report => {
+                          const feedbackKey = `${record.id}-${report.id}`;
+                          const isBusy = reportReviewAction?.reportId === report.id && reportReviewAction?.internshipId === record.id;
+                          const statusLabel = report.status === 'approved' ? 'Accepted' : report.status === 'rejected' ? 'Rejected' : 'Waiting';
+                          const statusVariant = report.status === 'approved' ? 'success' : report.status === 'rejected' ? 'danger' : 'warning';
+                          return (
+                            <Card key={report.id} className="border border-border dark:border-border dark:border-border/60">
+                              <div className="p-4 space-y-4">
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                  <div className="space-y-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge variant="secondary">Report #{report.report_number}</Badge>
+                                      <Badge variant={statusVariant}>{statusLabel}</Badge>
+                                    </div>
+                                    <div className="text-sm text-foreground whitespace-pre-wrap">{report.summary || 'No report content provided.'}</div>
+                                  </div>
+                                </div>
+                                <div className="space-y-3">
+                                  <div>
+                                    <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Optional Feedback</label>
+                                    <textarea
+                                      value={reportReviewDrafts[feedbackKey] ?? report.review_notes ?? ''}
+                                      onChange={event => setReportReviewDrafts(current => ({ ...current, [feedbackKey]: event.target.value }))}
+                                      className="flex min-h-[88px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      placeholder="Leave optional feedback..."
+                                    />
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className={decisionButtonClasses.approved}
+                                      disabled={isBusy}
+                                      isLoading={isBusy && reportReviewAction?.status === 'approved'}
+                                      onClick={() => handleReportReview(record.id, report, 'approved')}
+                                    >
+                                      Accept
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className={decisionButtonClasses.rejected}
+                                      disabled={isBusy}
+                                      isLoading={isBusy && reportReviewAction?.status === 'rejected'}
+                                      onClick={() => handleReportReview(record.id, report, 'rejected')}
+                                    >
+                                      Reject
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {reportReviewError ? (
+                      <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
+                        {reportReviewError}
+                      </div>
+                    ) : null}
+                  </SectionBlock>
+
+                  <SectionBlock
+                    title="Internship Final Status"
+                    description="Mark academic and career center fulfillment from the backend."
+                    icon={CheckCircle2}
+                  >
+                    <div className="space-y-4">
+                      {[
+                        { key: 'academic', title: 'Academic Final Status', value: record.academicFinalStatus || 'waiting' },
+                        { key: 'career_center', title: 'Career Center Final Status', value: record.careerCenterFinalStatus || 'waiting' },
+                      ].map(section => {
+                        const isBusy = finalStatusAction?.internshipId === record.id && finalStatusAction?.reviewType === section.key;
+                        const isFulfilled = section.value === 'fulfilled';
+                        return (
+                          <div key={section.key} className="rounded-lg border border-border dark:border-border dark:border-border/60 bg-muted dark:bg-muted dark:bg-muted/20 p-4 space-y-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant={isFulfilled ? 'success' : 'warning'}>
+                                {isFulfilled ? 'Fulfilled' : 'Waiting'}
+                              </Badge>
+                            </div>
+                            <p className="text-sm font-medium text-foreground">{section.title}</p>
+                            <Button
+                              type="button"
+                              disabled={isBusy || isFulfilled}
+                              isLoading={isBusy}
+                              onClick={() => handleFinalStatus(record, section.key)}
+                            >
+                              Mark as Fulfilled
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {finalStatusError ? (
+                      <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
+                        {finalStatusError}
+                      </div>
+                    ) : null}
+                  </SectionBlock>
+                </CardContent>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+
     </div>
   );
 }
