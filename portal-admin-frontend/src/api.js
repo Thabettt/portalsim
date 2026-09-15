@@ -1,5 +1,5 @@
 // In production, the frontend is served from the same origin as the API.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? "" : "http://localhost:8000");
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? "" : "http://localhost:6767");
 
 async function fetchApi(endpoint, options = {}) {
   const urlObj = new URL(`${API_BASE_URL}${endpoint}`, window.location.origin);

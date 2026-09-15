@@ -58,7 +58,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.routers import admin, webhooks, grades, enrollments, students, sync
+from app.routers import admin, webhooks, grades, enrollments, students, sync, courses
 
 # Include routers
 app.include_router(admin.router)
@@ -67,6 +67,7 @@ app.include_router(grades.router)
 app.include_router(enrollments.router)
 app.include_router(students.router)
 app.include_router(sync.router)
+app.include_router(courses.router)
 
 # Mount static assets directory
 static_dir = os.path.join(os.path.dirname(__file__), "..", "portal-admin-frontend", "dist")
@@ -124,4 +125,4 @@ async def webhook_processor():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=settings.debug)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=6767, reload=settings.debug)
