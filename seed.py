@@ -230,13 +230,13 @@ def seed_database():
         students = []
 
         FIRST_7_STUDENTS = [
-            ("STU001", "Ahmed Mohamed Hassan", "alialnaggar.h@gmail.com", False),
-            ("STU002", "Sara Ahmed Ali", "alialnaggar.h@gmail.com", False),
-            ("STU003", "Omar Khaled Mahmoud", "alialnaggar.h@gmail.com", False),
-            ("STU004", "Mariam Sherif Adel", "alialnaggar.h@gmail.com", False),
-            ("STU005", "Youssef Adel Ibrahim", "alialnaggar.h@gmail.com", False),
-            ("STU006", "Nouran Hossam El-Din", "alialnaggar.h@gmail.com", False),
-            ("STU007", "Fatma Wael Abdelrahman", "alialnaggar.h@gmail.com", False),
+            ("STU001", "Ahmed Mohamed Hassan", "alialnaggar.h+stu001@gmail.com", False),
+            ("STU002", "Sara Ahmed Ali", "alialnaggar.h+stu002@gmail.com", False),
+            ("STU003", "Omar Khaled Mahmoud", "alialnaggar.h+stu003@gmail.com", False),
+            ("STU004", "Mariam Sherif Adel", "alialnaggar.h+stu004@gmail.com", False),
+            ("STU005", "Youssef Adel Ibrahim", "alialnaggar.h+stu005@gmail.com", False),
+            ("STU006", "Nouran Hossam El-Din", "alialnaggar.h+stu006@gmail.com", False),
+            ("STU007", "Fatma Wael Abdelrahman", "alialnaggar.h+stu007@gmail.com", False),
         ]
 
         for stu_id, name, email, is_for in FIRST_7_STUDENTS:

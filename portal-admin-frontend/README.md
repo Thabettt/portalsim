@@ -16,7 +16,7 @@ This is the frontend control panel for the Simulated University Portal backend. 
 
 ## Configuration
 
-The application expects the FastAPI backend to be running on `http://localhost:8000` by default.
+The application expects the FastAPI backend to be running on `http://localhost:6767` by default.
 To point it at a different backend URL, create or edit the `.env` file in this directory and set the `VITE_API_BASE_URL` variable:
 ```env
 VITE_API_BASE_URL=https://your-custom-backend-url.com

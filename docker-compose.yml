@@ -5,7 +5,7 @@ services:
     build: .
     container_name: university-portal-sim
     ports:
-      - "8080:8080"
+      - "6767:6767"
     env_file:
       - .env
     volumes:
