@@ -3,6 +3,7 @@ import logging
 import uuid
 from collections import OrderedDict
 from datetime import datetime, timezone
+from typing import Optional
 
 import httpx
 from sqlmodel import Session, select
@@ -125,7 +126,7 @@ def build_chunk_payload(
     chunk_index: int,
     chunk_count: int,
     students: list[dict],
-    warning_level_labels: dict | None = None,
+    warning_level_labels: Optional[dict] = None,
 ) -> dict:
     """Build the per-chunk request body. chunk_index is 1-based."""
     payload = {
@@ -174,7 +175,7 @@ def _job_progress(job: dict) -> dict:
     }
 
 
-def get_finalization_progress(finalize_id: str) -> dict | None:
+def get_finalization_progress(finalize_id: str) -> Optional[dict]:
     job = _jobs.get(finalize_id)
     return _job_progress(job) if job else None
 
