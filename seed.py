@@ -96,6 +96,13 @@ EXAM_OFFICERS = [
     ("Admin Officer", "ADM-2024-0002", "admin@university.edu"),
 ]
 
+TEAM_STUDENTS = [
+    ("TEAM-001", "Abdulaziz", "thabetology@gmail.com", False),
+    ("TEAM-002", "Ali El-Naggar", "alialnaggar.h+ali@gmail.com", False),
+    ("TEAM-003", "Lakshy Rupani", "lakshyrupani.lr@gmail.com", False),
+    ("TEAM-004", "Mohamed Waleed", "giuians2027@gmail.com", False),
+]
+
 ORGANIZATIONS = [
     ("TechCorp Egypt", "Cairo", "Software Engineering"),
     ("Digital Solutions", "Alexandria", "Data Analytics"),
@@ -195,6 +202,22 @@ def seed_database():
                 is_active=True
             )
             session.add(admin)
+
+        # Create team member students
+        team_student_objs = []
+        for stu_id, name, email, is_for in TEAM_STUDENTS:
+            student = User(
+                student_id=stu_id,
+                email=email,
+                full_name=name,
+                role=UserRole.STUDENT,
+                hashed_password="demo_hash",
+                is_active=True,
+                is_foreigner=is_for,
+                id_card_image_url="/static/images/id_card.png"
+            )
+            session.add(student)
+            team_student_objs.append(student)
         session.commit()
 
         for inst, _ in instructor_objs:
@@ -277,7 +300,7 @@ def seed_database():
         # Remark test user fixture
         remark_test_user = User(
             student_id="STU-9999-0001",
-            email="thabetology+testuser@gmail.com",
+            email="alialnaggar.h+remark@gmail.com",
             full_name="Remark Test User",
             role=UserRole.STUDENT,
             hashed_password="demo_hash",
@@ -295,7 +318,7 @@ def seed_database():
 
         # 6. Enroll Students in Courses
         logger.info("Enrolling students in courses...")
-        all_student_objs = students + [remark_test_user]
+        all_student_objs = team_student_objs + students + [remark_test_user]
         student_enrollments = {}
 
         for idx, student in enumerate(all_student_objs):
@@ -484,32 +507,34 @@ def seed_database():
             if i == 0:
                 internship = Internship(
                     student_id=student.id,
-                    company_name="TechCorp Egypt",
-                    position="Software Engineering Intern",
-                    start_date=start_date,
-                    end_date=end_date,
+                    company_name="Oracle Egypt",
+                    position="Oracle Developer Intern",
+                    start_date=date(2026, 1, 15),
+                    end_date=date(2026, 6, 15),
                     status=InternshipStatus.PENDING,
-                    description="Software engineering internship pending career center review.",
-                    academic_supervisor_name=academic_supervisor_name,
+                    description="Maintain Oracle Forms applications, assist in bug fixing, develop SQL queries, support ERP enhancements, and document technical changes.",
+                    academic_supervisor_name="Dr. Mahmoud Hassan",
                     academic_supervisor_id="SUP001",
-                    supervisor_name=org_supervisor_name,
-                    supervisor_email=org_supervisor_email,
-                    supervisor_job_title=org_supervisor_title,
-                    supervisor_mobile=org_supervisor_mobile,
+                    supervisor_name="Karim Adel",
+                    supervisor_email="alialnaggar.h+stu001@gmail.com",
+                    supervisor_job_title="Senior Oracle Developer",
+                    supervisor_mobile="+20 101 234 5678",
                     country="Egypt",
-                    faculty="Faculty of Computer Science",
-                    first_major="Software Engineering",
-                    second_major="Artificial Intelligence",
-                    source_of_internship="Career Fair",
+                    faculty="Informatics and Computer Science",
+                    first_major="Business Informatics",
+                    second_major=None,
+                    source_of_internship="LinkedIn",
                     workplace="Hybrid",
-                    departments="Software Engineering",
+                    departments="Enterprise Applications",
                     days_per_week=5,
                     hours_per_day=8,
-                    entry_date=datetime.utcnow() - timedelta(days=60),
-                    proof_of_acceptance_uploaded_at=proof_uploaded_dt,
+                    entry_date=datetime(2026, 1, 10, 10, 30),
+                    proof_of_acceptance_uploaded_at=datetime(2026, 1, 9, 16, 12),
                     evaluation_form_uploaded_at=None,
                     career_center_review_status="Pending",
+                    career_center_review_reason=None,
                     supervisor_review_status="Pending",
+                    supervisor_review_reason=None,
                     academic_final_status="Waiting",
                     career_center_final_status="Waiting"
                 )
@@ -517,34 +542,166 @@ def seed_database():
                 # 0 progress reports
 
             # -------------------------------------------------------------
-            # SPECIFIC CASE 2: STU002, STU003, STU004 - Accepted (No Reports)
+            # SPECIFIC CASE 2: STU002 (Sara Ahmed Ali) - In Progress (5 Reports: 1 rejected, 2 pending)
             # -------------------------------------------------------------
-            elif i in (1, 2, 3):
+            elif i == 1:
                 internship = Internship(
                     student_id=student.id,
-                    company_name=org_name,
-                    position=f"{f_major} Intern",
-                    start_date=start_date,
-                    end_date=end_date,
-                    status=InternshipStatus.APPROVED,
-                    description=f"Approved {f_major} internship awaiting progress reports.",
-                    academic_supervisor_name=academic_supervisor_name,
-                    academic_supervisor_id=f"SUP{(i%10)+1:03d}",
-                    supervisor_name=org_supervisor_name,
-                    supervisor_email=org_supervisor_email,
-                    supervisor_job_title=org_supervisor_title,
-                    supervisor_mobile=org_supervisor_mobile,
+                    company_name="Tanmeyah",
+                    position="Oracle Developer Intern",
+                    start_date=date(2026, 1, 15),
+                    end_date=date(2026, 6, 15),
+                    status=InternshipStatus.IN_PROGRESS,
+                    description="Maintain Oracle Forms and Reports, support ERP modules, develop SQL procedures, fix production issues, and participate in testing.",
+                    academic_supervisor_name="Dr. Mona Ibrahim",
+                    academic_supervisor_id="SUP002",
+                    supervisor_name="Mohamed Samir",
+                    supervisor_email="alialnaggar.h+stu002@gmail.com",
+                    supervisor_job_title="Senior Software Engineer",
+                    supervisor_mobile="+20 100 456 7812",
                     country="Egypt",
-                    faculty=faculty,
-                    first_major=f_major,
-                    second_major=s_major,
-                    source_of_internship=source,
-                    workplace=workplace,
-                    departments=org_dept,
+                    faculty="Business Administration",
+                    first_major="Management",
+                    second_major="Marketing",
+                    source_of_internship="Career Fair",
+                    workplace="On Site",
+                    departments="Information Technology",
                     days_per_week=5,
                     hours_per_day=8,
-                    entry_date=datetime.utcnow() - timedelta(days=90),
-                    proof_of_acceptance_uploaded_at=proof_uploaded_dt,
+                    entry_date=datetime(2026, 1, 12, 9, 20),
+                    proof_of_acceptance_uploaded_at=datetime(2026, 1, 11, 11, 40),
+                    evaluation_form_uploaded_at=None,
+                    career_center_review_status="Accepted",
+                    career_center_review_reason="Internship approved.",
+                    supervisor_review_status="Accepted",
+                    supervisor_review_reason="Approved for academic supervision.",
+                    academic_final_status="Waiting",
+                    career_center_final_status="Waiting"
+                )
+                session.add(internship)
+                session.commit()
+                session.refresh(internship)
+
+                # 5 Reports: 1 approved, 1 rejected with feedback, 3 pending
+                reports_data = [
+                    (1, ProgressReportStatus.APPROVED, "Excellent first report. Good overview of onboarding activities.",
+                     "During my first two weeks, I completed the onboarding process, received access to Oracle Forms and Reports Builder, attended meetings with the ERP team, and learned the company's development workflow. I also explored the existing banking modules and documented the overall system architecture."),
+                    (2, ProgressReportStatus.REJECTED, "Please include more technical details and explain your personal contribution.",
+                     "I participated in resolving issues related to Oracle Forms, tested several existing reports, and reviewed SQL procedures used by the finance department. I also attended sprint meetings and documented the bugs identified during testing."),
+                    (3, ProgressReportStatus.PENDING, None,
+                     "During this period I developed enhancements for an Oracle Forms screen, wrote SQL queries to retrieve customer information, and worked closely with my mentor to understand deployment procedures."),
+                    (4, ProgressReportStatus.PENDING, None,
+                     "I optimized SQL queries to improve report performance, corrected validation issues in Oracle Forms, and participated in user acceptance testing with business stakeholders."),
+                    (5, ProgressReportStatus.PENDING, None,
+                     "I implemented minor feature requests, updated technical documentation, fixed reported defects, and assisted the development team during deployment preparation."),
+                ]
+                for r_num, r_status, r_notes, r_content in reports_data:
+                    sub_date = datetime(2026, 1, 29) + timedelta(weeks=(r_num - 1) * 2)
+                    session.add(InternshipProgressReport(
+                        internship_id=internship.id,
+                        report_number=r_num,
+                        summary=r_content,
+                        status=r_status,
+                        review_notes=r_notes,
+                        submitted_at=sub_date,
+                        reviewed_at=sub_date + timedelta(days=1) if r_status != ProgressReportStatus.PENDING else None
+                    ))
+
+            # -------------------------------------------------------------
+            # SPECIFIC CASE 2b: STU003 (Omar Khaled Mahmoud) - In Progress (10 Reports: 8 approved, 2 pending)
+            # -------------------------------------------------------------
+            elif i == 2:
+                internship = Internship(
+                    student_id=student.id,
+                    company_name="Siemens Egypt",
+                    position="Automation Engineering Intern",
+                    start_date=date(2026, 1, 15),
+                    end_date=date(2026, 6, 15),
+                    status=InternshipStatus.IN_PROGRESS,
+                    description="Support PLC programming, automation testing, industrial control systems, technical documentation, and equipment commissioning.",
+                    academic_supervisor_name="Dr. Ahmed Mostafa",
+                    academic_supervisor_id="SUP003",
+                    supervisor_name="Hany Fathy",
+                    supervisor_email="alialnaggar.h+stu003@gmail.com",
+                    supervisor_job_title="Automation Team Lead",
+                    supervisor_mobile="+20 102 777 8811",
+                    country="Egypt",
+                    faculty="Engineering",
+                    first_major="Mechatronics Engineering",
+                    second_major=None,
+                    source_of_internship="Internship Booklet",
+                    workplace="Hybrid",
+                    departments="Industrial Automation",
+                    days_per_week=5,
+                    hours_per_day=8,
+                    entry_date=datetime(2026, 1, 8, 14, 0),
+                    proof_of_acceptance_uploaded_at=datetime(2026, 1, 9, 10, 0),
+                    evaluation_form_uploaded_at=datetime(2026, 6, 16, 10, 0),
+                    career_center_review_status="Accepted",
+                    career_center_review_reason="Approved.",
+                    supervisor_review_status="Accepted",
+                    supervisor_review_reason="Approved.",
+                    academic_final_status="Waiting",
+                    career_center_final_status="Waiting"
+                )
+                session.add(internship)
+                session.commit()
+                session.refresh(internship)
+
+                # 10 Reports: 8 approved, 2 pending
+                reports_stu003 = [
+                    (1, ProgressReportStatus.APPROVED, "Familiarized with PLC programming environments and basic logic gates. Assisted in reviewing existing SCADA configurations for minor projects."),
+                    (2, ProgressReportStatus.APPROVED, "Participated in equipment testing and verified sensor calibrations. Documented the results for the engineering team."),
+                    (3, ProgressReportStatus.APPROVED, "Worked on automation troubleshooting for a simulated assembly line. Identified and resolved a timing issue in the control loop."),
+                    (4, ProgressReportStatus.APPROVED, "Helped draft technical documentation for the newly installed industrial control systems. Shadowed senior engineers during commissioning support."),
+                    (5, ProgressReportStatus.APPROVED, "Monitored production performance remotely and analyzed data logs for process optimization."),
+                    (6, ProgressReportStatus.APPROVED, "Optimized control system parameters to reduce cycle time by 5%. Presented findings to the automation team lead."),
+                    (7, ProgressReportStatus.APPROVED, "Assisted in writing a new PLC script for an upcoming manufacturing client. Conducted initial simulations."),
+                    (8, ProgressReportStatus.APPROVED, "Configured HMI panels to display real-time sensor data. Conducted user interface testing with operators."),
+                    (9, ProgressReportStatus.PENDING, "During this period I assisted in testing new PLC logic, verified safety interlocks, documented test results, and collaborated with senior engineers to resolve automation issues before deployment."),
+                    (10, ProgressReportStatus.PENDING, "I participated in the final commissioning phase, monitored production performance after deployment, prepared technical documentation, and presented my completed work to the engineering team."),
+                ]
+                for r_num, r_status, r_content in reports_stu003:
+                    sub_date = datetime(2026, 1, 29) + timedelta(weeks=(r_num - 1) * 2)
+                    session.add(InternshipProgressReport(
+                        internship_id=internship.id,
+                        report_number=r_num,
+                        summary=r_content,
+                        status=r_status,
+                        review_notes="Approved by Academic Supervisor." if r_status == ProgressReportStatus.APPROVED else None,
+                        submitted_at=sub_date,
+                        reviewed_at=sub_date + timedelta(days=1) if r_status == ProgressReportStatus.APPROVED else None
+                    ))
+
+            # -------------------------------------------------------------
+            # SPECIFIC CASE 2c: STU004 (Mariam Sherif Adel) - In Progress (0 Reports)
+            # -------------------------------------------------------------
+            elif i == 3:
+                internship = Internship(
+                    student_id=student.id,
+                    company_name="EVA Pharma",
+                    position="Quality Assurance Intern",
+                    start_date=date(2026, 1, 15),
+                    end_date=date(2026, 6, 15),
+                    status=InternshipStatus.IN_PROGRESS,
+                    description="Assist in quality inspections, laboratory documentation, compliance verification, and quality reporting.",
+                    academic_supervisor_name="Dr. Yasmine Nabil",
+                    academic_supervisor_id="SUP004",
+                    supervisor_name="Dina Tarek",
+                    supervisor_email="alialnaggar.h+stu004@gmail.com",
+                    supervisor_job_title="QA Supervisor",
+                    supervisor_mobile="+20 101 555 2211",
+                    country="Egypt",
+                    faculty="Biotechnology",
+                    first_major="Biotechnology",
+                    second_major=None,
+                    source_of_internship="Referral",
+                    workplace="On Site",
+                    departments="Quality Assurance",
+                    days_per_week=5,
+                    hours_per_day=8,
+                    entry_date=datetime(2026, 1, 14, 10, 0),
+                    proof_of_acceptance_uploaded_at=datetime(2026, 1, 14, 10, 0),
                     evaluation_form_uploaded_at=None,
                     career_center_review_status="Accepted",
                     supervisor_review_status="Accepted",
@@ -560,29 +717,29 @@ def seed_database():
             elif i == 4:
                 internship = Internship(
                     student_id=student.id,
-                    company_name=org_name,
-                    position=f"{f_major} Intern",
-                    start_date=start_date,
-                    end_date=end_date,
+                    company_name="ECG Engineering Consultants Group",
+                    position="Architectural Design Intern",
+                    start_date=date(2026, 1, 15),
+                    end_date=date(2026, 6, 15),
                     status=InternshipStatus.IN_PROGRESS,
-                    description="In-progress internship with 5 submitted reports (3 accepted, 1 pending, 1 rejected).",
-                    academic_supervisor_name=academic_supervisor_name,
+                    description="Assist with architectural drawings, BIM models, site coordination, and design documentation.",
+                    academic_supervisor_name="Dr. Khaled Amin",
                     academic_supervisor_id="SUP005",
-                    supervisor_name=org_supervisor_name,
-                    supervisor_email=org_supervisor_email,
-                    supervisor_job_title=org_supervisor_title,
-                    supervisor_mobile=org_supervisor_mobile,
+                    supervisor_name="Ahmed Ragab",
+                    supervisor_email="alialnaggar.h+stu005@gmail.com",
+                    supervisor_job_title="Senior Architect",
+                    supervisor_mobile="+20 100 987 6543",
                     country="Egypt",
-                    faculty=faculty,
-                    first_major=f_major,
-                    second_major=s_major,
-                    source_of_internship=source,
-                    workplace=workplace,
-                    departments=org_dept,
+                    faculty="Architecture",
+                    first_major="Architecture",
+                    second_major="Urban Design",
+                    source_of_internship="LinkedIn",
+                    workplace="Hybrid",
+                    departments="Design Office",
                     days_per_week=5,
                     hours_per_day=8,
-                    entry_date=datetime.utcnow() - timedelta(days=120),
-                    proof_of_acceptance_uploaded_at=proof_uploaded_dt,
+                    entry_date=datetime(2026, 1, 13, 10, 0),
+                    proof_of_acceptance_uploaded_at=datetime(2026, 1, 13, 10, 0),
                     evaluation_form_uploaded_at=None,
                     career_center_review_status="Accepted",
                     supervisor_review_status="Accepted",
@@ -619,33 +776,33 @@ def seed_database():
             elif i == 5:
                 internship = Internship(
                     student_id=student.id,
-                    company_name=org_name,
-                    position=f"{f_major} Intern",
-                    start_date=start_date,
-                    end_date=end_date,
+                    company_name="Pharco Pharmaceuticals",
+                    position="Production Engineering Intern",
+                    start_date=date(2026, 1, 15),
+                    end_date=date(2026, 6, 15),
                     status=InternshipStatus.IN_PROGRESS,
-                    description="Nearly complete internship with 8 accepted and 1 pending report.",
-                    academic_supervisor_name=academic_supervisor_name,
+                    description="Support pharmaceutical production, process monitoring, documentation, GMP compliance, and production planning.",
+                    academic_supervisor_name="Dr. Rania Fouad",
                     academic_supervisor_id="SUP006",
-                    supervisor_name=org_supervisor_name,
-                    supervisor_email=org_supervisor_email,
-                    supervisor_job_title=org_supervisor_title,
-                    supervisor_mobile=org_supervisor_mobile,
+                    supervisor_name="Mahmoud Atef",
+                    supervisor_email="alialnaggar.h+stu006@gmail.com",
+                    supervisor_job_title="Production Manager",
+                    supervisor_mobile="+20 102 333 1122",
                     country="Egypt",
-                    faculty=faculty,
-                    first_major=f_major,
-                    second_major=s_major,
-                    source_of_internship=source,
-                    workplace=workplace,
-                    departments=org_dept,
+                    faculty="Pharmaceuticals Engineering",
+                    first_major="Pharmaceutical Engineering",
+                    second_major=None,
+                    source_of_internship="Family Business",
+                    workplace="On Site",
+                    departments="Production",
                     days_per_week=5,
                     hours_per_day=8,
-                    entry_date=datetime.utcnow() - timedelta(days=130),
-                    proof_of_acceptance_uploaded_at=proof_uploaded_dt,
+                    entry_date=datetime(2026, 1, 15, 10, 0),
+                    proof_of_acceptance_uploaded_at=datetime(2026, 1, 15, 10, 0),
                     evaluation_form_uploaded_at=None,
                     career_center_review_status="Accepted",
                     supervisor_review_status="Accepted",
-                    academic_final_status="Waiting",  # EXPLICITLY WAITING per STU006 constraint!
+                    academic_final_status="Waiting",
                     career_center_final_status="Waiting"
                 )
                 session.add(internship)
@@ -667,51 +824,63 @@ def seed_database():
                     ))
 
             # -------------------------------------------------------------
-            # SPECIFIC CASE 5: STU007 (Fatma Wael Abdelrahman) - Waiting for Final CC Review (9 Accepted, Academic = Fulfilled, CC Final = Waiting)
+            # SPECIFIC CASE 5: STU007 (Fatma Wael Abdelrahman) - COMPLETED (10 Accepted Reports, Academic + CC Fulfilled)
             # -------------------------------------------------------------
             elif i == 6:
                 internship = Internship(
                     student_id=student.id,
-                    company_name=org_name,
-                    position=f"{f_major} Intern",
-                    start_date=start_date,
-                    end_date=end_date,
-                    status=InternshipStatus.IN_PROGRESS,
-                    description="Completed 9 progress reports and evaluation form uploaded; waiting for final Career Center sign-off.",
-                    academic_supervisor_name=academic_supervisor_name,
+                    company_name="Microsoft Egypt",
+                    position="Software Engineering Intern",
+                    start_date=date(2026, 1, 15),
+                    end_date=date(2026, 6, 15),
+                    status=InternshipStatus.COMPLETED,
+                    description="Develop cloud applications, implement backend services, perform testing, fix bugs, and participate in agile software development.",
+                    academic_supervisor_name="Dr. Heba Salah",
                     academic_supervisor_id="SUP007",
-                    supervisor_name=org_supervisor_name,
-                    supervisor_email=org_supervisor_email,
-                    supervisor_job_title=org_supervisor_title,
-                    supervisor_mobile=org_supervisor_mobile,
+                    supervisor_name="Omar Ashraf",
+                    supervisor_email="alialnaggar.h+stu007@gmail.com",
+                    supervisor_job_title="Software Engineering Manager",
+                    supervisor_mobile="+20 100 222 9988",
                     country="Egypt",
-                    faculty=faculty,
-                    first_major=f_major,
-                    second_major=s_major,
-                    source_of_internship=source,
-                    workplace=workplace,
-                    departments=org_dept,
+                    faculty="Informatics and Computer Science",
+                    first_major="Computer Science",
+                    second_major="Artificial Intelligence",
+                    source_of_internship="Career Fair",
+                    workplace="Hybrid",
+                    departments="Azure Development",
                     days_per_week=5,
                     hours_per_day=8,
-                    entry_date=datetime.utcnow() - timedelta(days=130),
-                    proof_of_acceptance_uploaded_at=proof_uploaded_dt,
-                    evaluation_form_uploaded_at=eval_uploaded_dt,
+                    entry_date=datetime(2026, 1, 10, 10, 0),
+                    proof_of_acceptance_uploaded_at=datetime(2026, 1, 9, 10, 0),
+                    evaluation_form_uploaded_at=datetime(2026, 6, 16, 10, 0),
                     career_center_review_status="Accepted",
                     supervisor_review_status="Accepted",
                     academic_final_status="Fulfilled",
-                    career_center_final_status="Waiting"
+                    career_center_final_status="Fulfilled"
                 )
                 session.add(internship)
                 session.commit()
                 session.refresh(internship)
 
-                # 9 Accepted Reports
-                for r_num in range(1, 10):
-                    sub_date = datetime.utcnow() - timedelta(days=120 - (r_num * 10))
+                # 10 Accepted Reports with detailed content
+                reports_stu007 = [
+                    (1, "Set up development environment, learned Azure core services, and familiarized with the CI/CD pipeline used for deployments."),
+                    (2, "Implemented a basic backend REST API using ASP.NET Core for internal telemetry collection. Wrote unit tests for the endpoints."),
+                    (3, "Integrated the telemetry API with an Azure SQL Database. Optimized entity framework queries to reduce latency."),
+                    (4, "Worked on a frontend dashboard using React to visualize the telemetry data. Configured Azure App Service for hosting the dashboard."),
+                    (5, "Participated in sprint planning and took ownership of three user stories related to user authentication via Microsoft Entra ID."),
+                    (6, "Resolved bugs reported during integration testing. Reviewed pull requests from other interns and provided code feedback."),
+                    (7, "Researched and implemented Azure Key Vault for securely storing API secrets. Updated technical documentation for the new architecture."),
+                    (8, "Assisted in migrating legacy data processing scripts to Azure Functions, resulting in more scalable and cost-effective execution."),
+                    (9, "Conducted a load testing session using Azure Load Testing to ensure the new architecture handles expected peak traffic."),
+                    (10, "Finalized the project documentation, fixed minor UI glitches in the dashboard, and delivered a final presentation of the project to the engineering team."),
+                ]
+                for r_num, r_content in reports_stu007:
+                    sub_date = datetime(2026, 1, 29) + timedelta(weeks=(r_num - 1) * 2)
                     session.add(InternshipProgressReport(
                         internship_id=internship.id,
                         report_number=r_num,
-                        summary=f"Progress report #{r_num}: Final milestones and thesis documentation.",
+                        summary=r_content,
                         status=ProgressReportStatus.APPROVED,
                         review_notes="Approved by Academic Supervisor.",
                         submitted_at=sub_date,
