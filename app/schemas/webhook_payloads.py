@@ -39,6 +39,7 @@ class ProgressReportStatusUpdatePayload(BaseWebhookPayload):
     new_status: str
     progress_report_number: int
     student_email: str
+    feedback: str = ""
 
 
 # Attendance Alert Payload

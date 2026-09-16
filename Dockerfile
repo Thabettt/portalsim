@@ -25,8 +25,8 @@ COPY seed.py .
 # Copy the built frontend from Stage 1 into the location expected by FastAPI
 COPY --from=frontend-builder /app/frontend/dist ./portal-admin-frontend/dist
 
-# Expose port 8080 (since 8000 is ERPNext and 5678 is n8n)
-EXPOSE 8080
+# Expose port 6767 (backend fixed port; 8000 is ERPNext and 5678 is n8n)
+EXPOSE 6767
 
 # Command to run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "6767"]

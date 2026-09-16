@@ -34,10 +34,10 @@ cp .env.example .env
 python seed.py
 
 # 6. Run server
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 6767
 
 # 7. Open Swagger UI
-# http://localhost:8000/docs
+# http://localhost:6767/docs
 ```
 
 ---
