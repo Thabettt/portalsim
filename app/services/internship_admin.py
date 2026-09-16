@@ -117,4 +117,4 @@ def build_internship_admin_record(internship: Any, student: Any, report_count: i
 
 
 def sort_internship_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return sorted(records, key=lambda record: str(record.get("student_id") or record.get("student_string_id") or "").casefold())
+    return sorted(records, key=lambda record: str(record.get("student_id") or record.get("student_string_id") or record.get("student_name") or "").casefold())
