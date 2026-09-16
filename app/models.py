@@ -89,7 +89,7 @@ class WebhookDeliveryStatus(str, PyEnum):
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     student_id: str = Field(unique=True, index=True, max_length=50)  # e.g., STU-2023-0142
-    email: str = Field(index=True, max_length=100)
+    email: str = Field(unique=True, index=True, max_length=100)
     full_name: str = Field(max_length=150)
     role: UserRole = Field(default=UserRole.STUDENT, sa_column=Column(SQLEnum(UserRole)))
     hashed_password: str = Field(max_length=255)  # Not used in demo, but kept for future

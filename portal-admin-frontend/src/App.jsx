@@ -15,6 +15,7 @@ import WebhookLog from './pages/WebhookLog';
 import Settings from './pages/Settings';
 import StudentDetail from './pages/StudentDetail';
 import StudentWarningStatus from './pages/StudentWarningStatus';
+import AttendanceSimulator from './pages/AttendanceSimulator';
 
 export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -56,6 +57,9 @@ export default function App() {
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/students/:studentId" element={<StudentDetail />} />
                   <Route path="/warning-status" element={<StudentWarningStatus />} />
+                  {import.meta.env.DEV && (
+                    <Route path="/attendance-simulator" element={<AttendanceSimulator />} />
+                  )}
                 </Routes>
               </div>
             </main>

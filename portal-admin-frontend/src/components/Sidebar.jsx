@@ -12,7 +12,8 @@ import {
   Sun,
   X,
   GraduationCap,
-  ShieldAlert
+  ShieldAlert,
+  FlaskConical
 } from 'lucide-react';
 import { getHealth } from '../api';
 import { useTheme } from '../hooks/useTheme';
@@ -27,6 +28,10 @@ const NAV_ITEMS = [
   { label: 'Warning Status', path: '/warning-status', icon: ShieldAlert },
   { label: 'Webhook Log', path: '/webhooks', icon: History },
   { label: 'Settings', path: '/settings', icon: Settings },
+  // Dev-only: stripped from production builds by Vite's dead-code elimination.
+  ...(import.meta.env.DEV
+    ? [{ label: 'Attendance Simulator', path: '/attendance-simulator', icon: FlaskConical }]
+    : []),
 ];
 
 export default function Sidebar({ isOpen, setIsOpen }) {

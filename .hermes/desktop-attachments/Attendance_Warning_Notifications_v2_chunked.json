@@ -1,0 +1,1806 @@
+{
+  "name": "Attendance Warning Notifications (v2 - open tracking)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "attendance-end-of-day",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "0dfdcaa3-7dd8-425e-bf01-b2defe501161",
+      "name": "Finalize EOD Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        384,
+        192
+      ],
+      "webhookId": "3feaf313-f7cc-4472-a2c2-85ac5efc2f67"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $input.first().json;\nconst body = (req && req.body && typeof req.body === 'object') ? req.body : req;\n\nconst nowIso = $now.setZone('Africa/Cairo').toISO();\nlet error = null;\nconst records = [];\nlet students_count = 0;\nlet course_records_count = 0;\n\nlet finalize_id = (body && body.finalize_id !== undefined && body.finalize_id !== null) ? String(body.finalize_id) : '';\nlet finalized_at = (body && body.finalized_at !== undefined && body.finalized_at !== null) ? String(body.finalized_at) : '';\nlet chunk_index = (body && body.chunk_index !== undefined) ? body.chunk_index : null;\nlet chunk_count = (body && body.chunk_count !== undefined) ? body.chunk_count : null;\n\nconst UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;\nconst ISO_RE = /^\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}(:\\d{2})?(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})?$/;\n\nfunction fail(msg){ if (error === null) error = msg; }\n\nfunction isPositiveInt(v) {\n  return (typeof v === 'number' && Number.isInteger(v) && v >= 1)\n    || (typeof v === 'string' && /^\\d+$/.test(v.trim()) && parseInt(v.trim(), 10) >= 1);\n}\n\nif (!body || typeof body !== 'object') {\n  fail('Request body is missing or not a JSON object.');\n} else if (!UUID_RE.test(finalize_id)) {\n  fail('finalize_id is missing or not a valid UUID.');\n} else if (!isPositiveInt(chunk_index)) {\n  fail('chunk_index is missing or not a positive integer.');\n} else if (!isPositiveInt(chunk_count)) {\n  fail('chunk_count is missing or not a positive integer.');\n} else if (Number(chunk_index) > Number(chunk_count)) {\n  fail('chunk_index cannot be greater than chunk_count.');\n} else if (!finalized_at || !ISO_RE.test(finalized_at) || isNaN(Date.parse(finalized_at))) {\n  fail('finalized_at is missing or not a valid ISO-8601 timestamp.');\n} else if (!Array.isArray(body.students)) {\n  fail('students must be an array.');\n} else if (body.students.length === 0) {\n  fail('students array is empty.');\n} else {\n  const seen = {};\n  const students = body.students;\n  for (let i = 0; i < students.length && error === null; i++) {\n    const s = students[i];\n    if (!s || typeof s !== 'object') { fail('Student at index ' + i + ' is not an object.'); break; }\n    const sid = (s.student_id !== undefined && s.student_id !== null) ? String(s.student_id).trim() : '';\n    if (sid === '') { fail('A student is missing a non-empty student_id.'); break; }\n    if (!Array.isArray(s.courses)) { fail('Student ' + sid + ' is missing a courses array.'); break; }\n    if (s.courses.length === 0) { fail('Student ' + sid + ' has an empty courses array.'); break; }\n    for (let j = 0; j < s.courses.length && error === null; j++) {\n      const c = s.courses[j];\n      if (!c || typeof c !== 'object') { fail('A course for student ' + sid + ' is not an object.'); break; }\n      const cid = (c.course_id !== undefined && c.course_id !== null) ? String(c.course_id).trim() : '';\n      if (cid === '') { fail('A course for student ' + sid + ' is missing a non-empty course_id.'); break; }\n      const wlRaw = c.warning_level;\n      let wl;\n      if (typeof wlRaw === 'number' && Number.isInteger(wlRaw)) { wl = wlRaw; }\n      else if (typeof wlRaw === 'string' && /^-?\\d+$/.test(wlRaw.trim())) { wl = parseInt(wlRaw.trim(), 10); }\n      else { fail('warning_level for student ' + sid + ' course ' + cid + ' must be an integer.'); break; }\n      if (wl < 0 || wl > 3) { fail('warning_level for student ' + sid + ' course ' + cid + ' must be an integer from 0 through 3.'); break; }\n      const state_key = sid + ':' + cid;\n      if (seen[state_key]) { fail('Duplicate student_id + course_id combination: ' + state_key); break; }\n      seen[state_key] = true;\n      records.push({\n        state_key: state_key,\n        student_id: sid,\n        student_name: (s.student_name !== undefined && s.student_name !== null) ? String(s.student_name) : '',\n        recipient: (s.recipient !== undefined && s.recipient !== null) ? String(s.recipient) : '',\n        course_id: cid,\n        course_name: (c.course_name !== undefined && c.course_name !== null) ? String(c.course_name) : '',\n        warning_level: wl,\n      });\n    }\n  }\n  if (error === null) {\n    students_count = students.length;\n    course_records_count = records.length;\n  }\n}\n\nconst valid = error === null;\nlet payload_json = '';\ntry { payload_json = JSON.stringify(body); } catch (e) { payload_json = ''; }\n\n// Composite dedup key: one chunk = one (finalize_id, chunk_index) pair.\n// Kept as \"batch_id\" so the existing dedup/storage nodes downstream\n// don't need to change at all.\nconst batch_id = valid ? (finalize_id + ':' + chunk_index) : '';\n\nreturn [{ json: {\n  valid: valid,\n  error: error,\n  batch_id: batch_id,\n  finalize_id: finalize_id,\n  chunk_index: valid ? Number(chunk_index) : null,\n  chunk_count: valid ? Number(chunk_count) : null,\n  finalized_at: finalized_at,\n  received_at: nowIso,\n  students_count: students_count,\n  course_records_count: course_records_count,\n  records: records,\n  payload_json: payload_json,\n  invalidResponse: { accepted: false, error: error || 'Invalid request.' },\n} }];"
+      },
+      "id": "e2c33e6f-8d18-4a95-a493-5cb09911aa67",
+      "name": "Validate & Flatten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid-check",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8ded21b4-036d-4526-90da-099c66e0424f",
+      "name": "Is Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        832,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "M7zwitfBXfiiAzB4",
+          "mode": "id"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "batch_id",
+              "keyValue": "={{ $('Validate & Flatten').first().json.batch_id }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "id": "943fe3a9-24de-4ca5-b265-df9c2e0b8457",
+      "name": "Load Existing Batch",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1056,
+        96
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $('Validate & Flatten').first().json;\nconst existing = $('Load Existing Batch').all().map(i => i.json)\n  .filter(r => r && r.batch_id !== undefined && r.batch_id !== null && String(r.batch_id) === String(v.batch_id));\nconst isDuplicate = existing.length > 0;\n\nreturn [{ json: {\n  valid: v.valid,\n  batch_id: v.batch_id,\n  finalize_id: v.finalize_id,\n  chunk_index: v.chunk_index,\n  chunk_count: v.chunk_count,\n  finalized_at: v.finalized_at,\n  received_at: v.received_at,\n  students_count: v.students_count,\n  course_records_count: v.course_records_count,\n  payload_json: v.payload_json,\n  isDuplicate: isDuplicate,\n  duplicateResponse: {\n    accepted: true, duplicate: true,\n    finalize_id: v.finalize_id, chunk_index: v.chunk_index, chunk_count: v.chunk_count,\n    message: 'This chunk was already accepted.',\n  },\n  acceptedResponse: {\n    accepted: true, duplicate: false,\n    finalize_id: v.finalize_id, chunk_index: v.chunk_index, chunk_count: v.chunk_count,\n    students_processed: v.students_count,\n    course_records_received: v.course_records_count,\n    message: 'Chunk accepted for processing.',\n  },\n} }];"
+      },
+      "id": "38474846-b91b-44a7-a7f5-aea7a5523a71",
+      "name": "Route Batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dup-check",
+              "leftValue": "={{ $json.isDuplicate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "17e14167-ce12-403e-ad64-69b5ae3f8897",
+      "name": "Is Duplicate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1504,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $('Route Batch').first().json.duplicateResponse }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "5b6e9c65-3572-4d96-8be2-e7bf81b5c726",
+      "name": "Respond 200 Duplicate",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1728,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "M7zwitfBXfiiAzB4",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "batch_id": "={{ $json.batch_id }}",
+            "finalized_at": "={{ $json.finalized_at }}",
+            "received_at": "={{ $json.received_at }}",
+            "status": "processing",
+            "students_count": "={{ $json.students_count }}",
+            "course_records_count": "={{ $json.course_records_count }}",
+            "payload_json": "={{ $json.payload_json }}",
+            "finalize_id": "={{ $json.finalize_id }}",
+            "chunk_index": "={{ $json.chunk_index }}",
+            "chunk_count": "={{ $json.chunk_count }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "batch_id",
+              "displayName": "batch_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "finalized_at",
+              "displayName": "finalized_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "received_at",
+              "displayName": "received_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "students_count",
+              "displayName": "students_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "course_records_count",
+              "displayName": "course_records_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "payload_json",
+              "displayName": "payload_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "finalize_id",
+              "displayName": "finalize_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "chunk_index",
+              "displayName": "chunk_index",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "chunk_count",
+              "displayName": "chunk_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "b37f6929-e673-49d5-9f68-15f026f2d9a3",
+      "name": "Store Batch",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1728,
+        288
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $('Route Batch').first().json.acceptedResponse }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "b3071112-2ec3-45e1-b87a-d1613096dd93",
+      "name": "Respond 202 Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1952,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "test-mode",
+              "name": "test_mode",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "test-recipient",
+              "name": "test_recipient",
+              "value": "rupanilakshy@gmail.com",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "46cd2af4-ad4a-4596-927c-b65f8e7f9904",
+      "name": "Email Test Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2176,
+        192
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "V8UG5rKpBbTa581S",
+          "mode": "id"
+        },
+        "returnAll": true
+      },
+      "id": "b601acae-bb08-42f9-b46c-845b493a8600",
+      "name": "Load Warning State",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        192
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "eDXw1hJB3Xm5hY9a",
+          "mode": "id"
+        },
+        "returnAll": true
+      },
+      "id": "d077bd40-3032-456e-9a99-580073660fa6",
+      "name": "Load Notification Log",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2848,
+        192
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const LF = String.fromCharCode(10);\nconst BULLET = String.fromCharCode(0x2022);\nconst ARROW = String.fromCharCode(0x2192);\n\n// EDIT THIS to your real n8n public URL before activating.\nconst PIXEL_BASE_URL = 'http://34.123.5.126:5678/webhook/track-email-open';\n\nconst ATTENDANCE_URL =\n  'https://portal.giu-uni.de/GIUb/EXTStudent/ClassAttendance_ViewStudentAttendance_b.aspx';\n\nconst LABELS = { 0: 'Good', 1: 'Warning 1', 2: 'Warning 2', 3: 'Drop' };\nconst BAR_COLORS = ['#34a853', '#f9ab00', '#e8710a', '#d93025'];\nconst BAR_INACTIVE = '#e0e0e0';\n\nfunction label(level) {\n  if (level === null || level === undefined) return 'No longer enrolled';\n  return LABELS[level] !== undefined ? LABELS[level] : 'Level ' + level;\n}\n\nfunction hashStr(value) {\n  const text = value || '';\n  let hash = 5381;\n  for (let i = 0; i < text.length; i++) {\n    hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0;\n  }\n  return hash.toString(16);\n}\n\nfunction escapeHtml(value) {\n  return String(value ?? '')\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n    .replace(/\"/g, '&quot;')\n    .replace(/'/g, '&#039;');\n}\n\n// Table-based progress bar (email-client safe: no flex/grid).\nfunction progressBarHtml(level) {\n  const safeLevel = (level === null || level === undefined) ? 0 : level;\n  let cells = '';\n  for (let i = 0; i <= 3; i++) {\n    const active = i <= safeLevel;\n    const color = active ? BAR_COLORS[i] : BAR_INACTIVE;\n    cells +=\n      '<td style=\"width:25%;height:10px;background:' + color +\n      ';border-radius:3px;' + (i < 3 ? 'border-right:3px solid #ffffff;' : '') +\n      '\"></td>';\n  }\n  return (\n    '<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:6px 0 2px;\">' +\n      '<tr>' + cells + '</tr>' +\n    '</table>' +\n    '<div style=\"font-size:12px;color:#555555;margin-bottom:10px;\">' +\n      'Warning Level ' + safeLevel + ' of 3 &mdash; ' + escapeHtml(label(safeLevel)) +\n    '</div>'\n  );\n}\n\nfunction loaded(name) {\n  return $(name).all().map(item => item.json).filter(row => row && Object.keys(row).length > 0);\n}\n\nconst nowCairo = $now.setZone('Africa/Cairo');\nconst today = nowCairo.toFormat('yyyy-MM-dd');\nconst nowIso = nowCairo.toISO();\n\nconst currentRecords = $('Validate & Flatten').first().json.records || [];\n\nconst previousRows = loaded('Load Warning State');\nconst notificationLogRows = loaded('Load Notification Log');\n\nconst previousMap = {};\npreviousRows.forEach(row => { previousMap[row.state_key] = row; });\n\nconst currentMap = {};\nconst currentByStudent = {};\ncurrentRecords.forEach(record => {\n  currentMap[record.state_key] = record;\n  if (!currentByStudent[record.student_id]) currentByStudent[record.student_id] = record;\n});\n\nconst sentKeys = {};\nnotificationLogRows.forEach(row => {\n  if (row.idempotency_key && String(row.status).toLowerCase() === 'sent') {\n    sentKeys[row.idempotency_key] = true;\n  }\n});\n\nconst stateUpserts = currentRecords.map(record => ({\n  state_key: record.state_key,\n  student_id: record.student_id,\n  course_id: record.course_id,\n  course_name: record.course_name,\n  warning_level: record.warning_level,\n  snapshot_date: today,\n  updated_at: nowIso,\n}));\n\nconst isFirstRun = previousRows.length === 0;\n\nif (isFirstRun) {\n  return [{ json: { isFirstRun: true, processedDate: today, notifications: [], stateUpserts } }];\n}\n\n// Silent transition rule: 0 -> 1 (and \"newly appearing at level 1\", which is\n// implicitly a 0 -> 1) must NOT trigger a notification for that course. Any\n// other transition (e.g. 2 -> 1, 1 -> 0, 1 -> 2, X -> 3, course removed,\n// etc.) still notifies.\nfunction isSilentTransition(previousLevel, newLevel) {\n  return newLevel === 1 && (previousLevel === 0 || previousLevel === null || previousLevel === undefined);\n}\n\nconst changesByStudent = {};\n\nfunction ensureStudent(studentId, studentName, recipient) {\n  if (!changesByStudent[studentId]) {\n    changesByStudent[studentId] = { student_id: studentId, student_name: studentName || '', recipient: recipient || '', changes: [] };\n  }\n  return changesByStudent[studentId];\n}\n\nObject.keys(currentMap).forEach(stateKey => {\n  const current = currentMap[stateKey];\n  const previous = previousMap[stateKey];\n  const previousLevel = previous === undefined ? null : previous.warning_level;\n\n  const changed = previous === undefined\n    ? current.warning_level !== 0\n    : previousLevel !== current.warning_level;\n\n  if (!changed) return;\n  if (isSilentTransition(previousLevel, current.warning_level)) return;\n\n  ensureStudent(current.student_id, current.student_name, current.recipient).changes.push({\n    state_key: stateKey,\n    course_id: current.course_id,\n    course_name: current.course_name,\n    previous_level: previousLevel,\n    new_level: current.warning_level,\n  });\n});\n\nObject.keys(previousMap).forEach(stateKey => {\n  if (currentMap[stateKey]) return;\n  const previous = previousMap[stateKey];\n  const currentStudent = currentByStudent[previous.student_id];\n  if (!currentStudent) return;\n\n  // course disappeared -> not a 0->1 case, always notify\n  ensureStudent(previous.student_id, currentStudent.student_name, currentStudent.recipient).changes.push({\n    state_key: stateKey,\n    course_id: previous.course_id,\n    course_name: previous.course_name,\n    previous_level: previous.warning_level,\n    new_level: null,\n  });\n});\n\nconst notifications = [];\n\nObject.keys(changesByStudent).forEach(studentId => {\n  const student = changesByStudent[studentId];\n  if (!student.changes.length) return; // everything filtered out (e.g. only 0->1 changes)\n\n  const changesJson = JSON.stringify(student.changes);\n  const hasLevel3Drop = student.changes.some(change => change.new_level === 3);\n  const notificationType = hasLevel3Drop ? 'WARNING_LEVEL_3_DROP' : 'WARNING_CHANGE';\n\n  const uniqueSuffix = nowCairo.toMillis();\n  const idempotencyKey = [student.student_id, uniqueSuffix, notificationType, hashStr(changesJson)].join(':');\n  if (sentKeys[idempotencyKey]) return;\n\n  const textLines = student.changes.map(change =>\n    BULLET + ' ' + change.course_name + ': ' + label(change.previous_level) + ' ' + ARROW + ' ' + label(change.new_level)\n  );\n\n  const title = hasLevel3Drop ? 'URGENT: Course Drop Notice' : 'Attendance Warning Level Update';\n\n  const importantText = hasLevel3Drop\n    ? 'Important: Level 3 means you have been marked as dropped from the course. Please contact your TA or the academic administration immediately if this is incorrect.'\n    : 'Please contact your TA if you believe any attendance information is incorrect.';\n\n  const message =\n    'Dear ' + student.student_name + ',' + LF + LF +\n    'Please be informed that your attendance warning status has been updated for the following course(s):' + LF + LF +\n    textLines.join(LF) + LF + LF +\n    importantText + LF + LF +\n    'Please make sure to:' + LF +\n    '1. Review your attendance record using the link below.' + LF +\n    '2. Contact your TA or academic administration if a correction is required.' + LF + LF +\n    'Best regards,' + LF + 'Academic Administration' + LF + 'German International University (GIU)' + LF + LF +\n    ATTENDANCE_URL;\n\n  const changesHtml = student.changes.map(change => {\n    const isDrop = change.new_level === 3;\n    return (\n      '<li style=\"margin:0 0 16px;' + (isDrop ? 'color:#d93025;' : '') + '\">' +\n        '<strong>' + escapeHtml(change.course_name) + '</strong>: ' +\n        escapeHtml(label(change.previous_level)) + ' ' + escapeHtml(ARROW) + ' ' +\n        '<strong>' + escapeHtml(label(change.new_level)) + '</strong>' +\n        progressBarHtml(change.new_level) +\n      '</li>'\n    );\n  }).join('');\n\n  const importantMessage = hasLevel3Drop\n    ? '<p style=\"color:#d93025;\"><strong>Important:</strong> Level 3 means you have been marked as dropped from the course. Please review your attendance record and contact your TA or the academic administration immediately if this is incorrect.</p>'\n    : '<p>Please review these changes and contact your TA if you believe any attendance information is incorrect.</p>';\n\n  const pixelUrl = PIXEL_BASE_URL + '?key=' + encodeURIComponent(idempotencyKey);\n\n  const messageHtml =\n    '<div style=\"font-family:Arial,Helvetica,sans-serif;color:#222222;font-size:16px;line-height:1.45;\">' +\n      '<p>Dear ' + escapeHtml(student.student_name) + ',</p>' +\n      '<p>Please be informed that your attendance warning status has been updated for the following course(s):</p>' +\n      '<ul style=\"margin:12px 0 18px;padding-left:28px;list-style:none;\">' + changesHtml + '</ul>' +\n      importantMessage +\n      '<p><strong><u>Please make sure to:</u></strong></p>' +\n      '<ol style=\"margin:8px 0 18px;padding-left:34px;\">' +\n        '<li style=\"margin-bottom:8px;\">Review your attendance record using the link below.</li>' +\n        '<li>Contact your TA or academic administration if a correction is required.</li>' +\n      '</ol>' +\n      '<p>Best regards,<br><strong>Academic Administration</strong><br>German International University (GIU)</p>' +\n      '<p><a href=\"' + ATTENDANCE_URL + '\">' + ATTENDANCE_URL + '</a></p>' +\n      '<img src=\"' + pixelUrl + '\" width=\"1\" height=\"1\" alt=\"\" style=\"display:block;border:0;width:1px;height:1px;\" />' +\n    '</div>';\n\n  notifications.push({\n    student_id: student.student_id,\n    student_name: student.student_name,\n    recipient: student.recipient,\n    title,\n    message,\n    message_html: messageHtml,\n    idempotency_key: idempotencyKey,\n    notification_type: notificationType,\n    has_level_3_drop: hasLevel3Drop,\n    changes_json: changesJson,\n    sent_at: nowIso,\n  });\n});\n\nreturn [{ json: { isFirstRun: false, processedDate: today, notifications, stateUpserts } }];"
+      },
+      "id": "63a54e31-581a-4911-ad83-e78bd39d9075",
+      "name": "Compute Notifications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3072,
+        192
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const arr = ($('Compute Notifications').first().json.stateUpserts) || [];\nreturn arr.map(x => ({ json: x }));"
+      },
+      "id": "6e089e65-1088-4f1c-b014-eb71155d0d62",
+      "name": "Extract State Upserts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3296,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "V8UG5rKpBbTa581S",
+          "mode": "id"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $json.state_key }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "state_key": "={{ $json.state_key }}",
+            "student_id": "={{ $json.student_id }}",
+            "course_id": "={{ $json.course_id }}",
+            "course_name": "={{ $json.course_name }}",
+            "warning_level": "={{ $json.warning_level }}",
+            "snapshot_date": "={{ $json.snapshot_date }}",
+            "updated_at": "={{ $json.updated_at }}"
+          },
+          "matchingColumns": [
+            "state_key"
+          ],
+          "schema": [
+            {
+              "id": "state_key",
+              "displayName": "state_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "student_id",
+              "displayName": "student_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "course_id",
+              "displayName": "course_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "course_name",
+              "displayName": "course_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "warning_level",
+              "displayName": "warning_level",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "snapshot_date",
+              "displayName": "snapshot_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "4ca82fc5-4274-4b78-bf76-d421f9b6d2c4",
+      "name": "Upsert Warning State",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3520,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "M7zwitfBXfiiAzB4",
+          "mode": "id"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "batch_id",
+              "keyValue": "={{ $('Route Batch').first().json.batch_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "completed",
+            "students_count": 0,
+            "course_records_count": 0
+          },
+          "matchingColumns": [
+            "batch_id"
+          ],
+          "schema": [
+            {
+              "id": "batch_id",
+              "displayName": "batch_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "finalized_at",
+              "displayName": "finalized_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "received_at",
+              "displayName": "received_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "students_count",
+              "displayName": "students_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "course_records_count",
+              "displayName": "course_records_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "payload_json",
+              "displayName": "payload_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "518199d1-0b16-49fc-854f-208b48b4ad6d",
+      "name": "Mark Batch Completed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3744,
+        16
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const arr = ($('Compute Notifications').first().json.notifications) || [];\nreturn arr.map(item => ({ json: item }));"
+      },
+      "id": "f6b12163-aa30-49a2-a61e-822fa2ed59d6",
+      "name": "Extract Notifications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3296,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "eDXw1hJB3Xm5hY9a",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "idempotency_key": "={{ $('Extract Notifications').item.json.idempotency_key }}",
+            "student_id": "={{ $('Extract Notifications').item.json.student_id }}",
+            "notification_type": "={{ $('Extract Notifications').item.json.notification_type }}",
+            "status": "sent",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "idempotency_key",
+              "displayName": "idempotency_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "student_id",
+              "displayName": "student_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "notification_type",
+              "displayName": "notification_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sent_at",
+              "displayName": "sent_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "16c70003-11bc-4b5f-96af-6833a40d8b3f",
+      "name": "Log Delivery",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3744,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({ accepted: false, error: 'Attendance snapshot could not be stored.' }) }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "6ee61567-23d4-4b69-bbc7-1d7a6a1463bc",
+      "name": "Respond 500 Storage Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1952,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "M7zwitfBXfiiAzB4",
+          "mode": "id"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "batch_id",
+              "keyValue": "={{ $('Route Batch').first().json.batch_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "failed",
+            "error_message": "={{ ($json.error && $json.error.message) ? $json.error.message : 'Processing failed after acceptance.' }}",
+            "students_count": 0,
+            "course_records_count": 0
+          },
+          "matchingColumns": [
+            "batch_id"
+          ],
+          "schema": [
+            {
+              "id": "batch_id",
+              "displayName": "batch_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "finalized_at",
+              "displayName": "finalized_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "received_at",
+              "displayName": "received_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "students_count",
+              "displayName": "students_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "course_records_count",
+              "displayName": "course_records_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "payload_json",
+              "displayName": "payload_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "6683636f-1627-4f9f-9bca-d6062db07dc2",
+      "name": "Mark Batch Failed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3296,
+        672
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "eDXw1hJB3Xm5hY9a",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "idempotency_key": "={{ $('Extract Notifications').item.json.idempotency_key }}",
+            "student_id": "={{ $('Extract Notifications').item.json.student_id }}",
+            "notification_type": "={{ $('Extract Notifications').item.json.notification_type }}",
+            "status": "failed",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "idempotency_key",
+              "displayName": "idempotency_key",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "student_id",
+              "displayName": "student_id",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notification_type",
+              "displayName": "notification_type",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sent_at",
+              "displayName": "sent_at",
+              "type": "dateTime",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "3c8bbad1-b86b-4343-a075-46b9556cfc50",
+      "name": "Log Failure",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3744,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $('Validate & Flatten').first().json.invalidResponse }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "855c408b-5c0c-4368-a92c-bda1f87bd3e6",
+      "name": "Respond 400 Invalid",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1056,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Attendance Warning Notifications\n\nThe portal POSTs a finalized nested attendance-warning snapshot. The workflow validates and stores the batch, flattens student/course records, compares them with the stored warning state, sends one change notification (silently skipping pure 0->1 transitions), embeds a progress bar + open-tracking pixel in the email, logs a read receipt row, logs delivery, and upserts the new state.\n\nLevel 3 - Drop uses an urgent red HTML email. Email Test Config can redirect all mail to a controlled recipient.\n\nIMPORTANT: set PIXEL_BASE_URL in 'Compute Notifications' to your real n8n webhook URL for the 'Email Open Pixel Tracker' workflow, and set the dataTableId in 'Insert Read Receipts' to your email_read_receipts table id.",
+        "height": 560,
+        "width": 620,
+        "color": 4
+      },
+      "id": "c548d059-453b-4d23-a5e6-2aea0b23327d",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1104,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Synchronous responses\n- 400 invalid payload (accepted:false, error)\n- 200 duplicate batch_id (accepted:true, duplicate:true)\n- 500 storage failure before acceptance (accepted:false)\n- 202 accepted after durable store (accepted:true, duplicate:false)\n\nInvalid payloads never update warning state or send notifications.",
+        "height": 332,
+        "width": 460,
+        "color": 2
+      },
+      "id": "7e4b2977-2949-4a72-a29e-3035711706c3",
+      "name": "Responses",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1728,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## First run\n\nWhen no warning-state rows exist, the first valid snapshot establishes the baseline and sends no notifications. Later snapshots notify only when a warning level changes, a non-Good course first appears, or a tracked course disappears.",
+        "height": 464,
+        "width": 472,
+        "color": 5
+      },
+      "id": "866fcfc8-6b72-4140-b2b6-4783c366725f",
+      "name": "First Run",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        624,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const notifications = ($('Compute Notifications').first().json.notifications) || [];\nconst rows = notifications.map(n => ({\n  idempotency_key: n.idempotency_key,\n  student_id: n.student_id,\n  student_name: n.student_name,\n  notification_type: n.notification_type,\n  changes_json: n.changes_json,\n  sent_at: n.sent_at,\n  opened: false,\n  opened_at: null,\n  open_count: 0,\n}));\nreturn rows.map(r => ({ json: r }));"
+      },
+      "id": "da73ec35-a837-4d2a-a293-5c9b720409d3",
+      "name": "Extract Read Receipts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3296,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "MQrwoqLPuhvFHwyx",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "idempotency_key": "={{ $json.idempotency_key }}",
+            "student_id": "={{ $json.student_id }}",
+            "student_name": "={{ $json.student_name }}",
+            "notification_type": "={{ $json.notification_type }}",
+            "changes_json": "={{ $json.changes_json }}",
+            "sent_at": "={{ $json.sent_at }}",
+            "opened": "={{ $json.opened }}",
+            "opened_at": "={{ $json.opened_at }}",
+            "open_count": "={{ $json.open_count }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "idempotency_key",
+              "displayName": "idempotency_key",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "student_id",
+              "displayName": "student_id",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "student_name",
+              "displayName": "student_name",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "notification_type",
+              "displayName": "notification_type",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "changes_json",
+              "displayName": "changes_json",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sent_at",
+              "displayName": "sent_at",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "opened",
+              "displayName": "opened",
+              "type": "boolean",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "opened_at",
+              "displayName": "opened_at",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "open_count",
+              "displayName": "open_count",
+              "type": "number",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "0065a29b-27b4-477f-82eb-9f9c32efbef1",
+      "name": "Insert Read Receipts",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3520,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "rupanilakshy@gmail.com",
+        "toEmail": "={{ $('Email Test Config').first().json.test_mode ? $('Email Test Config').first().json.test_recipient : $json.recipient }}",
+        "html": "={{ \n  (\n    $('Email Test Config').first().json.test_mode\n      ? (\n          '<p style=\"color:#d93025;\">' +\n          '<strong>TEST MODE</strong><br>' +\n          'Original recipient: ' +\n          $json.recipient +\n          '</p>'\n        )\n      : ''\n  ) +\n  $json.message_html\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        3520,
+        480
+      ],
+      "id": "a73e14bd-cbc4-485e-b6fc-c75cc5d81cb5",
+      "name": "Send an Email",
+      "webhookId": "15a373cb-a718-43e1-a267-123605ff5cdb",
+      "credentials": {
+        "smtp": {
+          "id": "1NV0zJhJZahHJnLR",
+          "name": "SMTP account 3"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATATABLE_ID",
+          "cachedResultName": "attendance_finalize_runs"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "finalize_id",
+              "keyValue": "={{ $('Route Batch').first().json.finalize_id }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "id": "cc000001-0000-4000-8000-000000000001",
+      "name": "Load Finalize Progress",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3968,
+        16
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const route = $('Route Batch').first().json;\nconst existing = $input.all().map(i => i.json).filter(r => r && r.finalize_id);\nconst priorCount = existing.length ? (Number(existing[0].chunks_received) || 0) : 0;\nconst chunksReceived = priorCount + 1;\nconst chunkCount = Number(route.chunk_count) || 0;\nconst isComplete = chunksReceived >= chunkCount;\nconst nowIso = $now.setZone('Africa/Cairo').toISO();\nreturn [{ json: {\n  exists: existing.length > 0,\n  finalize_id: route.finalize_id,\n  chunk_count: chunkCount,\n  chunks_received: chunksReceived,\n  first_chunk_at: existing.length ? existing[0].first_chunk_at : nowIso,\n  completed_at: isComplete ? nowIso : null,\n  status: isComplete ? 'completed' : 'in_progress',\n} }];"
+      },
+      "id": "cc000001-0000-4000-8000-000000000002",
+      "name": "Compute Finalize Progress",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4192,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "exists-check",
+              "leftValue": "={{ $json.exists }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cc000001-0000-4000-8000-000000000003",
+      "name": "Progress Row Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4416,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATATABLE_ID",
+          "cachedResultName": "attendance_finalize_runs"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "finalize_id",
+              "keyValue": "={{ $json.finalize_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chunks_received": "={{ $json.chunks_received }}",
+            "completed_at": "={{ $json.completed_at }}",
+            "status": "={{ $json.status }}"
+          },
+          "matchingColumns": [
+            "finalize_id"
+          ],
+          "schema": [
+            {
+              "id": "finalize_id",
+              "displayName": "finalize_id",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "chunk_count",
+              "displayName": "chunk_count",
+              "type": "number",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "chunks_received",
+              "displayName": "chunks_received",
+              "type": "number",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "first_chunk_at",
+              "displayName": "first_chunk_at",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "completed_at",
+              "displayName": "completed_at",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "cc000001-0000-4000-8000-000000000004",
+      "name": "Update Finalize Progress",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4640,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATATABLE_ID",
+          "cachedResultName": "attendance_finalize_runs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "finalize_id": "={{ $json.finalize_id }}",
+            "chunk_count": "={{ $json.chunk_count }}",
+            "chunks_received": "={{ $json.chunks_received }}",
+            "first_chunk_at": "={{ $json.first_chunk_at }}",
+            "completed_at": "={{ $json.completed_at }}",
+            "status": "={{ $json.status }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "finalize_id",
+              "displayName": "finalize_id",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "chunk_count",
+              "displayName": "chunk_count",
+              "type": "number",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "chunks_received",
+              "displayName": "chunks_received",
+              "type": "number",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "first_chunk_at",
+              "displayName": "first_chunk_at",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "completed_at",
+              "displayName": "completed_at",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "cc000001-0000-4000-8000-000000000005",
+      "name": "Insert Finalize Progress",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4640,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Chunked finalize-day ingestion\n\nEach POST is now ONE CHUNK of a day's finalize run, not the whole day:\n{ finalize_id, chunk_index, chunk_count, finalized_at, students: [...] }\n\nDedup is per (finalize_id, chunk_index) - stored internally as batch_id = finalize_id + ':' + chunk_index, so the existing dedup/storage nodes didn't need to change.\n\nAfter a chunk finishes successfully, 'Load/Compute/Update|Insert Finalize Progress' increments a counter in attendance_finalize_runs and marks the whole finalize_id 'completed' once chunks_received reaches chunk_count. This is informational only (for monitoring 'did today's finalize fully land') - it does not gate or block anything downstream.\n\nSETUP: create a new Data Table 'attendance_finalize_runs' with columns finalize_id, chunk_count, chunks_received, first_chunk_at, completed_at, status - then point both new data-table nodes at it. Also add finalize_id/chunk_index/chunk_count columns to your existing attendance_finalize_batches table (Store Batch now writes to them).",
+        "height": 400,
+        "width": 620,
+        "color": 5
+      },
+      "id": "cc000001-0000-4000-8000-000000000006",
+      "name": "Chunking Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3968,
+        236
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Finalize EOD Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate & Flatten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Flatten": {
+      "main": [
+        [
+          {
+            "node": "Is Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid": {
+      "main": [
+        [
+          {
+            "node": "Load Existing Batch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400 Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Existing Batch": {
+      "main": [
+        [
+          {
+            "node": "Route Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Batch": {
+      "main": [
+        [
+          {
+            "node": "Is Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Duplicate": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Store Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Batch": {
+      "main": [
+        [
+          {
+            "node": "Respond 202 Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 500 Storage Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 202 Accepted": {
+      "main": [
+        [
+          {
+            "node": "Email Test Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Test Config": {
+      "main": [
+        [
+          {
+            "node": "Load Warning State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Warning State": {
+      "main": [
+        [
+          {
+            "node": "Load Notification Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Notification Log": {
+      "main": [
+        [
+          {
+            "node": "Compute Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Notifications": {
+      "main": [
+        [
+          {
+            "node": "Extract State Upserts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract Notifications",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract Read Receipts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Batch Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract State Upserts": {
+      "main": [
+        [
+          {
+            "node": "Upsert Warning State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Warning State": {
+      "main": [
+        [
+          {
+            "node": "Mark Batch Completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Notifications": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Read Receipts": {
+      "main": [
+        [
+          {
+            "node": "Insert Read Receipts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send an Email": {
+      "main": [
+        [
+          {
+            "node": "Log Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Batch Completed": {
+      "main": [
+        [
+          {
+            "node": "Load Finalize Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Finalize Progress": {
+      "main": [
+        [
+          {
+            "node": "Compute Finalize Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Finalize Progress": {
+      "main": [
+        [
+          {
+            "node": "Progress Row Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Progress Row Exists": {
+      "main": [
+        [
+          {
+            "node": "Update Finalize Progress",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Insert Finalize Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9316c0d4-69e0-4895-8447-b7ab0706511c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "46a632b96e9c5dbc438826230ae60b001b8f6d4e993177cbe9801fb091f1cfcc"
+  },
+  "nodeGroups": [],
+  "id": "6yQCXtoOtKs7ilgz",
+  "tags": []
+}
