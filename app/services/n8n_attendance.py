@@ -442,6 +442,7 @@ async def start_attendance_finalization(session: Session) -> dict:
         finalized_at=snapshot["finalized_at"],
         chunk_size=max(1, settings.attendance_chunk_size),
         warning_level_labels=snapshot["warning_level_labels"],
+        today_date=datetime.now(timezone.utc).date().isoformat(),
         course_records_count=snapshot["course_records_count"],
     )
     _register_job(job)
